@@ -69,7 +69,7 @@ DEFAULTS = dict(
 )
 
 
-def _handle_default(k, v=None):
+def _handle_default(key_in, val_in=None):
     """Avoid dicts as default keyword arguments.
 
     Use this function instead to resolve default dict values. Example usage::
@@ -77,11 +77,11 @@ def _handle_default(k, v=None):
         scalings = _handle_default('scalings', scalings)
 
     """
-    this_mapping = deepcopy(DEFAULTS[k])
-    if v is not None:
-        if isinstance(v, dict):
-            this_mapping.update(v)
+    this_mapping = deepcopy(DEFAULTS[key_in])
+    if val_in is not None:
+        if isinstance(val_in, dict):
+            this_mapping.update(val_in)
         else:
             for key in this_mapping.keys():
-                this_mapping[key] = v
+                this_mapping[key] = val_in
     return this_mapping

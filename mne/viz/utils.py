@@ -535,6 +535,10 @@ def _layout_figure(params):
         pos = [l_border - vscroll_dist - scroll_width_x * 2, b_border,
                scroll_width_x * 2, scroll_width_y]
         params['ax_help_button'].set_position(pos)
+    if 'ax_scales' in params:
+        pos = [l_border - vscroll_dist - scroll_width_x * 3, ax_y,
+               scroll_width_x * 2, ax_height]
+        params['ax_scales'].set_position(pos)
     params['fig'].canvas.draw()
 
 

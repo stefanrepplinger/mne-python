@@ -946,21 +946,21 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
     # Reorganize channels
     inds = list()
     types = list()
-    for t in ['grad', 'mag']:
-        idxs = pick_types(params['info'], meg=t, ref_meg=False, exclude=[])
+    for ch_type in ['grad', 'mag']:
+        idxs = pick_types(params['info'], meg=ch_type, ref_meg=False, exclude=[])
         if len(idxs) < 1:
             continue
         mask = np.in1d(idxs, picks, assume_unique=True)
         inds.append(idxs[mask])
-        types += [t] * len(inds[-1])
-    for t in ['hbo', 'hbr']:
-        idxs = pick_types(params['info'], meg=False, ref_meg=False, fnirs=t,
+        types += [ch_type] * len(inds[-1])
+    for ch_type in ['hbo', 'hbr']:
+        idxs = pick_types(params['info'], meg=False, ref_meg=False, fnirs=ch_type,
                           exclude=[])
         if len(idxs) < 1:
             continue
         mask = np.in1d(idxs, picks, assume_unique=True)
         inds.append(idxs[mask])
-        types += [t] * len(inds[-1])
+        types += [ch_type] * len(inds[-1])
     pick_kwargs = dict(meg=False, ref_meg=False, exclude=[])
     if order is None:
         order = ['eeg', 'seeg', 'ecog', 'eog', 'ecg', 'emg', 'ref_meg', 'stim',
@@ -994,7 +994,9 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
             title = ''
     fig = figure_nobar(facecolor='w', figsize=size, dpi=80)
     fig.canvas.set_window_title('mne_browse_epochs')
-    ax = plt.subplot2grid((10, 15), (0, 1), colspan=13, rowspan=9)
+
+    n_rows, n_cols = 10, 15
+    ax = plt.subplot2grid((n_rows, n_cols), (0, 1), rowspan=9, colspan=12, fig=fig)
 
     ax.annotate(title, xy=(0.5, 1), xytext=(0, ax.get_ylim()[1] + 15),
                 ha='center', va='bottom', size=12, xycoords='axes fraction',
@@ -1005,15 +1007,19 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
     ax2 = ax.twiny()
     ax2.set_zorder(-1)
     ax2.axis([0, duration, 0, 200])
-    ax_hscroll = plt.subplot2grid((10, 15), (9, 1), colspan=13)
+
+    # establishing compartments of the figure
+    ax_scales = plt.subplot2grid((n_rows, n_cols), (0, 0), rowspan=9, fig=fig)
+    ax_scales.set_axis_off()
+    ax_scales.set_xlabel('Scales')
+    ax_hscroll = plt.subplot2grid((n_rows, n_cols), (9, 0), colspan=13, fig=fig)
     ax_hscroll.get_yaxis().set_visible(False)
     ax_hscroll.set_xlabel('Epochs')
-    ax_vscroll = plt.subplot2grid((10, 15), (0, 14), rowspan=9)
+    ax_vscroll = plt.subplot2grid((n_rows, n_cols), (0, 13), rowspan=9, fig=fig)
     ax_vscroll.set_axis_off()
     ax_vscroll.add_patch(mpl.patches.Rectangle((0, 0), 1, len(picks),
                                                facecolor='w', zorder=3))
-
-    ax_help_button = plt.subplot2grid((10, 15), (9, 0), colspan=1)
+    ax_help_button = plt.subplot2grid((n_rows, n_cols), (9, 14), colspan=1, fig=fig)
     help_button = mpl.widgets.Button(ax_help_button, 'Help')
     help_button.on_clicked(partial(_onclick_help, params=params))
 
@@ -1034,6 +1040,21 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
 
     ax_vscroll.set_ylim(len(types), 0)
     ax_vscroll.set_title('Ch.')
+
+###SR
+    scalings_plot = {key: val for key, val in scalings.items() if key in types}
+    for idx, (key, val) in enumerate(scalings_plot.items()):
+        y_coord = (idx/len(scalings_plot))+.1
+        ax_scales.text(.1, y_coord+.15, round(val, 2))
+        scalebar_coords = [y_coord, y_coord, y_coord, y_coord,
+                           y_coord+.1, y_coord+.1, y_coord+.1]
+        line = mpl.lines.Line2D([.45, .5, .55, .5, .5, .45, .55],
+                                scalebar_coords,
+                                color=color[key],
+                                axes=ax_scales)
+        ax_scales.add_line(line)
+    ax_scales.set_axis_off()
+    ax_scales.set_title('Scales')
 
     # populate colors list
     type_colors = [colorConverter.to_rgba(color[c]) for c in types]
@@ -1104,13 +1125,14 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
         for label in ax.xaxis.get_ticklabels():
             label.set_visible(False)
 
-    params.update({'fig': fig,
-                   'ax': ax,
+    params.update({'fig': fig, # main figure
+                   'ax': ax, # main axes
                    'ax2': ax2,
-                   'ax_hscroll': ax_hscroll,
-                   'ax_vscroll': ax_vscroll,
-                   'vsel_patch': vsel_patch,
-                   'hsel_patch': hsel_patch,
+                   'ax_hscroll': ax_hscroll, # axis for horizontal scroll element
+                   'ax_vscroll': ax_vscroll, # axis for vertical scroll element
+                   'ax_scales': ax_scales, # axes for scales element
+                   'vsel_patch': vsel_patch, # vertical selection patch
+                   'hsel_patch': hsel_patch, # horzontal selection patch
                    'lines': lines,
                    'projs': projs,
                    'ch_names': ch_names,
@@ -1118,8 +1140,8 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
                    'n_epochs': n_epochs,
                    'scalings': scalings,
                    'duration': duration,
-                   'ch_start': 0,
-                   'colors': colors,
+                   'ch_start': 0,   # index of first channel shown
+                   'colors': colors,    # colors for channels
                    'def_colors': type_colors,  # don't change at runtime
                    'picks': picks,
                    'bads': np.array(list(), dtype=int),
@@ -1205,6 +1227,11 @@ def _plot_traces(params):
         ch_start = params['ch_start']
         n_channels = params['n_channels']
         data = params['data'] * params['scale_factor']
+        scalings_plot = {key: val for key, val in params['scalings'].items() if key in params['types']}
+        params['ax_scales'].texts = []
+        for idx, (key, val) in enumerate(scalings_plot.items()):
+            y_coord = (idx/len(scalings_plot))+.1
+            params['ax_scales'].text(.1, y_coord+.15, round(val, 2))
     offsets = params['offsets']
     lines = params['lines']
     epochs = params['epochs']
@@ -1283,6 +1310,7 @@ def _plot_traces(params):
                 False)
     params['ax2'].set_xlim(params['times'][0],
                            params['times'][0] + params['duration'], False)
+
     if butterfly:
         factor = -1. / params['butterfly_scale']
         labels = [''] * 20
@@ -1326,8 +1354,8 @@ def _plot_traces(params):
                                1e6 * factor)
         # Heuristic to turn floats to ints where possible (e.g. -500.0 to -500)
         for li, label in enumerate(labels):
-            if isinstance(label, float) and float(str(label)) == round(label):
-                labels[li] = int(round(label))
+            if isinstance(label, float) and float(str(label)) != round(label, 2):
+                labels[li] = round(label, 2)
         ax.set_yticklabels(labels, fontsize=12, color='black')
     else:
         ax.set_yticklabels(tick_list, fontsize=12)
@@ -1599,12 +1627,14 @@ def _plot_onkey(event, params):
             params['butterfly_scale'] /= 1.1
         else:
             params['scale_factor'] /= 1.1
+            params['scalings'] = {key: val*1.1 for key, val in params['scalings'].items()}
         params['plot_fun']()
     elif event.key in ['+', '=']:
         if params['butterfly']:
             params['butterfly_scale'] *= 1.1
         else:
             params['scale_factor'] *= 1.1
+            params['scalings'] = {key: val/1.1 for key, val in params['scalings'].items()}
         params['plot_fun']()
     elif event.key == 'f11':
         mng = plt.get_current_fig_manager()
