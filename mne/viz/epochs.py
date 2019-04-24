@@ -1172,7 +1172,7 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
                    'event_colors': event_colors,
                    'ev_lines': list(),
                    'ev_texts': list(),
-                   'ann': list()})
+                   'ann': list()}) # list for annotations for unitlabelling in butterfly mode
 
     params['plot_fun'] = partial(_plot_traces, params=params)
 
@@ -1237,11 +1237,21 @@ def _plot_traces(params):
         ch_start = params['ch_start']
         n_channels = params['n_channels']
         data = params['data'] * params['scale_factor']
-        scalings_plot = {key: val for key, val in params['scalings'].items() if key in params['types']}
+        scalings_plot = {key: val for key, val in params['scalings'].items()
+                            if key in params['types']}
         params['ax_scales'].texts = []
+        ticks = offsets
+        ticks = [ticks[x] if x < len(ticks) else 0 for x in range(20)]
         for idx, (key, val) in enumerate(scalings_plot.items()):
             y_coord = (idx/len(scalings_plot))+.1
-            params['ax_scales'].text(.1, y_coord+.15, round(val, 2))
+            pos = (0, 1 - (ticks[ch_start] / ax.get_ylim()[0]))
+
+            # params['ax_scales'].text(.1, y_coord+.15, round(val, 2))
+            params['ax2'].annotate('%s (%s)' % (round(val, 2), round(val, 2)),
+                                   xy=pos, xytext=(-70, 0),
+                                   ha='left', size=12, va='center',
+                                   xycoords='axes fraction', rotation=90,
+                                   textcoords='offset points')
 
     n_times = len(epochs.times)
     tick_list = list()
@@ -1705,6 +1715,7 @@ def _plot_onkey(event, params):
 def _prepare_butterfly(params):
     """Set up butterfly plot."""
     from matplotlib.collections import LineCollection
+    import matplotlib as mpl
     if params['butterfly']:
         units = _handle_default('units')
         chantypes = sorted(set(params['types']) & set(units.keys()),
@@ -1724,7 +1735,6 @@ def _prepare_butterfly(params):
         used_types = 0
         params['offsets'] = [ticks[2]]
         ann = params['ann']
-        import matplotlib as mpl
         annotations = [child for child in params['ax2'].get_children()
                         if isinstance(child, mpl.text.Annotation)]
         for annote in annotations:
