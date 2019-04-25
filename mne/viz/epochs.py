@@ -6,6 +6,7 @@
 #          Eric Larson <larson.eric.d@gmail.com>
 #          Jaakko Leppakangas <jaeilepp@student.jyu.fi>
 #          Jona Sassenhagen <jona.sassenhagen@gmail.com>
+#          Stefan Repplinger <stefan.repplinger@ovgu.de>
 #
 # License: Simplified BSD
 
@@ -18,7 +19,8 @@ import numpy as np
 from ..utils import (verbose, get_config, set_config, logger, warn, _pl,
                      fill_doc)
 from ..io.pick import (pick_types, channel_type, _get_channel_types,
-                       _picks_to_idx, _DATA_CH_TYPES_SPLIT)
+                       _picks_to_idx, _DATA_CH_TYPES_SPLIT,
+                       _DATA_CH_TYPES_ORDER_DEFAULT)
 from ..time_frequency import psd_multitaper
 from .utils import (tight_layout, figure_nobar, _toggle_proj, _toggle_options,
                     _layout_figure, _setup_vmin_vmax, _channels_changed,
@@ -289,7 +291,6 @@ def plot_epochs_image(epochs, picks=None, sigma=0., vmin=None,
                     ax.vlines(line, this_ymin, max_height, colors='k',
                               linestyles='-' if line in overlay else "--",
                               linewidth=2. if line in overlay else 1.)
-
     plt_show(show)
     return figs
 
@@ -700,8 +701,9 @@ def _epochs_axes_onclick(event, params):
 
 @fill_doc
 def plot_epochs(epochs, picks=None, scalings=None, n_epochs=20, n_channels=20,
-                title=None, events=None, event_colors=None, show=True,
-                block=False, decim='auto', noise_cov=None, butterfly=False):
+                title=None, events=None, event_colors=None, order=None,
+                show=True, block=False, decim='auto', noise_cov=None,
+                butterfly=False):
     """Visualize epochs.
 
     Bad epochs can be marked with a left click on top of the epoch. Bad
@@ -750,6 +752,10 @@ def plot_epochs(epochs, picks=None, scalings=None, n_epochs=20, n_channels=20,
         coloring scheme as :func:`mne.viz.plot_events`.
 
         .. versionadded:: 0.14.0
+    order : array of str | None
+        Order in which to plot channel types.
+
+        .. versionadded:: 0.18.0
     show : bool
         Show figure if True. Defaults to True
     block : bool
@@ -816,7 +822,7 @@ def plot_epochs(epochs, picks=None, scalings=None, n_epochs=20, n_channels=20,
                   use_noise_cov=noise_cov is not None)
     params['label_click_fun'] = partial(_pick_bad_channels, params=params)
     _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
-                               title, picks, events=events,
+                               title, picks, events=events, order=order,
                                event_colors=event_colors, butterfly=butterfly)
     _prepare_projectors(params)
     _layout_figure(params)
@@ -945,44 +951,19 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
     from matplotlib.colors import colorConverter
     epochs = params['epochs']
 
+    # Reorganize channels
     picks = _picks_to_idx(epochs.info, picks)
     picks = sorted(picks)
-    # Reorganize channels
-    inds = list()
-    types = list()
-    for ch_type in ['grad', 'mag']:
-        idxs = pick_types(params['info'], meg=ch_type, ref_meg=False, exclude=[])
-        if len(idxs) < 1:
-            continue
-        mask = np.in1d(idxs, picks, assume_unique=True)
-        inds.append(idxs[mask])
-        types += [ch_type] * len(inds[-1])
-    for ch_type in ['hbo', 'hbr']:
-        idxs = pick_types(params['info'], meg=False, ref_meg=False, fnirs=ch_type,
-                          exclude=[])
-        if len(idxs) < 1:
-            continue
-        mask = np.in1d(idxs, picks, assume_unique=True)
-        inds.append(idxs[mask])
-        types += [ch_type] * len(inds[-1])
-    pick_kwargs = dict(meg=False, ref_meg=False, exclude=[])
+    types = [channel_type(epochs.info, ch) for ch in picks] # channel type string for every channel
+    ch_types = list(_get_channel_types(epochs.info))    # list of unique channel types
     if order is None:
-        order = ['eeg', 'seeg', 'ecog', 'eog', 'ecg', 'emg', 'ref_meg', 'stim',
-                 'resp', 'misc', 'chpi', 'syst', 'ias', 'exci']
-    for ch_type in order:
-        pick_kwargs[ch_type] = True
-        idxs = pick_types(params['info'], **pick_kwargs)
-        if len(idxs) < 1:
-            continue
-        mask = np.in1d(idxs, picks, assume_unique=True)
-        inds.append(idxs[mask])
-        types += [ch_type] * len(inds[-1])
-        pick_kwargs[ch_type] = False
-    inds = np.concatenate(inds).astype(int)
+        order = _DATA_CH_TYPES_ORDER_DEFAULT
+    inds = [pick_idx for order_type in order for pick_idx, ch_type in zip(picks,types) if order_type==ch_type]
+    types = sorted(types, key=order.index)
     if not len(inds) == len(picks):
         raise RuntimeError('Some channels not classified. Please'
                            ' check your picks')
-    ch_names = [params['info']['ch_names'][x] for x in inds]
+    ch_names = [params['info']['ch_names'][idx] for idx in inds]
 
     # set up plotting
     size = get_config('MNE_BROWSE_RAW_SIZE')
@@ -1172,7 +1153,9 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
                    'event_colors': event_colors,
                    'ev_lines': list(),
                    'ev_texts': list(),
-                   'ann': list()}) # list for annotations for unitlabelling in butterfly mode
+                   'ann': list(), # list to store annotations for butterfly view
+                   'order' : order,
+                   'ch_types': ch_types})
 
     params['plot_fun'] = partial(_plot_traces, params=params)
 
@@ -1271,13 +1254,14 @@ def _plot_traces(params):
         elif ch_idx < len(params['ch_names']):
             if butterfly:
                 ch_type = params['types'][ch_idx]
-                ch_plot = sorted(set(params['types']) & set(_DATA_CH_TYPES_SPLIT),
-                                 key=_DATA_CH_TYPES_SPLIT.index)
+                chan_types_split = sorted(set(params['ch_types']) &
+                                          set(_DATA_CH_TYPES_SPLIT),
+                                          key=params['order'].index)
                 offsets = np.arange(0, ax.get_ylim()[0],
-                                    ax.get_ylim()[0]/(4*len(ch_plot)))
-                offset_pos = np.arange(2, len(ch_plot)*4, 4)
-                if ch_type in ch_plot:
-                    offset = offsets[offset_pos[ch_plot.index(ch_type)]]
+                                    ax.get_ylim()[0]/(4*len(chan_types_split)))
+                offset_pos = np.arange(2, len(chan_types_split)*4, 4)
+                if ch_type in chan_types_split:
+                    offset = offsets[offset_pos[chan_types_split.index(ch_type)]]
                 else:
                     lines[line_idx].set_segments(list())
             else:
@@ -1327,20 +1311,23 @@ def _plot_traces(params):
 
     if butterfly:
         factor = -1. / params['butterfly_scale']
-        scalings = _handle_default('scalings')
-        n_chantypes = len(set(params['types']).intersection(scalings))
-        offsets = np.arange(0, ax.get_ylim()[0],
-                            ax.get_ylim()[0]/(4*n_chantypes))
+        scalings_default = _handle_default('scalings')
+        chan_types_split = sorted(set(params['ch_types']) &
+                                  set(_DATA_CH_TYPES_SPLIT),
+                                  key=params['order'].index)
+        ylim = ax.get_ylim()[0]
+        offsets = np.arange(0, ylim, ylim/(4*len(chan_types_split)))
         ax.set_yticks(offsets)
         labels = [''] * 20
         ch_plotted = 0
-        for idx_type, (ch_type, scale) in enumerate(scalings.items()):
+        for ch_type in chan_types_split:
+            scale = scalings_default[ch_type]
             if ch_type in params['types']:
                 labels[2 + ch_plotted * 4] = 0.
-                for idx, idx_tick in enumerate([1 + ch_plotted * 4, 3 + ch_plotted * 4]):
-                    labels[idx_tick] = [-1, 1][idx] * \
+                for idx, idx_tick in enumerate([1+ch_plotted*4, 3+ch_plotted*4]):
+                    labels[idx_tick] = ((offsets[idx_tick]-offsets[idx_tick+[+2, -2][idx]]) * \
                                        params['scalings'][ch_type] * \
-                                       scale * factor
+                                       scale * factor)
                 ch_plotted += 1
         # Heuristic to turn floats to ints where possible (e.g. -500.0 to -500)
         for li, label in enumerate(labels):
@@ -1718,9 +1705,9 @@ def _prepare_butterfly(params):
     import matplotlib as mpl
     if params['butterfly']:
         units = _handle_default('units')
-        chantypes = sorted(set(params['types']) & set(units.keys()),
-                           key=[*units].index)
-        if len(chantypes) < 1:
+        chan_types = sorted(set(params['types']) & set(params['order']),
+                            key=params['order'].index)
+        if len(chan_types) < 1:
             return
         params['ax_vscroll'].set_visible(False)
         ax = params['ax']
@@ -1728,12 +1715,13 @@ def _prepare_butterfly(params):
         for label in labels:
             label.set_visible(True)
         offsets = np.arange(0, ax.get_ylim()[0],
-                            ax.get_ylim()[0]/(4*len(chantypes)))
+                            ax.get_ylim()[0]/(4*len(chan_types)))
         ticks = offsets
         ticks = [ticks[x] if x < len(ticks) else 0 for x in range(20)]
         ax.set_yticks(ticks)
         used_types = 0
         params['offsets'] = [ticks[2]]
+        # checking which annotations are displayed and removing them
         ann = params['ann']
         annotations = [child for child in params['ax2'].get_children()
                         if isinstance(child, mpl.text.Annotation)]
@@ -1741,14 +1729,15 @@ def _prepare_butterfly(params):
             annote.remove()
         ann[:] = list()
         assert len(params['ann']) == 0
-        for idx, (ch_type, unit) in enumerate(units.items()):
-            if ch_type in chantypes:
-                pos = (0, 1 - (ticks[2+4*used_types] / ax.get_ylim()[0]))
-                ann.append(params['ax2'].annotate('%s (%s)' % (ch_type, unit), xy=pos, xytext=(-70, 0),
-                                       ha='left', size=12, va='center',
-                                       xycoords='axes fraction', rotation=90,
-                                       textcoords='offset points'))
-                used_types += 1
+        for chan_type in chan_types:
+            unit = units[chan_type]
+            pos = (0, 1 - (ticks[2+4*used_types] / ax.get_ylim()[0]))
+            ann.append(params['ax2'].annotate('%s (%s)' % (chan_type, unit),
+                                   xy=pos, xytext=(-70, 0),
+                                   ha='left', size=12, va='center',
+                                   xycoords='axes fraction', rotation=90,
+                                   textcoords='offset points'))
+            used_types += 1
         while len(params['lines']) < len(params['picks']):
             lc = LineCollection(list(), antialiased=True, linewidths=.5,
                                 zorder=3, picker=3.)
