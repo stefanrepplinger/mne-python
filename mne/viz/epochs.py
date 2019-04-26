@@ -1248,28 +1248,6 @@ def _plot_traces(params):
         ch_start = params['ch_start']
         n_channels = params['n_channels']
         data = params['data'] * params['scale_factor']
-        params['ax_scales'].texts = []
-        ticks = offsets
-        ticks = [ticks[x] if x < len(ticks) else 0 for x in range(20)]
-        ch_types = params['ch_types']
-        import matplotlib as mpl
-        ann = params['ann']
-        annotations = [child for child in params['ax2'].get_children()
-                        if isinstance(child, mpl.text.Annotation)]
-        for annote in annotations:
-            annote.remove()
-        ann[:] = list()
-        assert len(params['ann']) == 0
-        for ch_type in ch_types:
-            y_coord = (len(ch_types))+.1
-            pos = (0, 1 - (ticks[ch_start] / ax.get_ylim()[0]))
-
-            # params['ax_scales'].text(.1, y_coord+.15, round(val, 2))
-            ann.append(params['ax2'].annotate('%s (%s)' % ('testvalue1', 'testvalue2'),
-                                   xy=pos, xytext=(-70, 0),
-                                   ha='left', size=12, va='center',
-                                   xycoords='axes fraction', rotation=90,
-                                   textcoords='offset points'))
 
     n_times = len(epochs.times)
     tick_list = list()
@@ -1288,7 +1266,7 @@ def _plot_traces(params):
             break
         elif ch_idx < len(params['ch_names']):
             if butterfly:
-                # determine offsets for signal traces
+                # determine offsets of signal traces
                 ch_type = params['types'][ch_idx]
                 chan_types_split = sorted(set(params['ch_types']) &
                                           set(_DATA_CH_TYPES_SPLIT),
@@ -1303,6 +1281,31 @@ def _plot_traces(params):
             else:
                 tick_list += [params['ch_names'][ch_idx]]
                 offset = offsets[line_idx]
+
+                # plotting the scaling bars
+                params['ax_scales'].texts = []
+                ticks = offsets
+
+                ticks = [ticks[x] if x < len(ticks) else 0 for x in range(n_channels)]
+                ch_types = params['ch_types']
+                import matplotlib as mpl
+                ann = params['ann']
+                annotations = [child for child in params['ax2'].get_children()
+                                if isinstance(child, mpl.text.Annotation)]
+                for annote in annotations:
+                    annote.remove()
+                ann[:] = list()
+                assert len(params['ann']) == 0
+                for ch_type in ch_types:
+                    y_coord = (len(ch_types))+.1
+                    pos = (0, 1 - (ticks[ch_start] / ax.get_ylim()[0]))
+
+                    # params['ax_scales'].text(.1, y_coord+.15, round(val, 2))
+                    ann.append(params['ax2'].annotate('%s (%s)' % ('testvalue1', 'testvalue2'),
+                                           xy=pos, xytext=(-70, 0),
+                                           ha='left', size=12, va='center',
+                                           xycoords='axes fraction', rotation=90,
+                                           textcoords='offset points'))
 
             if params['inds'][ch_idx] in params['data_picks']:
                 this_decim = params['decim']
