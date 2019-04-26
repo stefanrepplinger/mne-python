@@ -1047,7 +1047,6 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
                                                    facecolor=this_color,
                                                    edgecolor=this_color,
                                                    zorder=4))
-
     vsel_patch = mpl.patches.Rectangle((0, 0), 1, n_channels, alpha=0.5,
                                        edgecolor='w', facecolor='w', zorder=5)
     ax_vscroll.add_patch(vsel_patch)
@@ -1056,17 +1055,17 @@ def _prepare_mne_browse_epochs(params, projs, n_channels, n_epochs, scalings,
     ax_vscroll.set_title('Ch.')
 
 ###SR
-    scalings_plot = {key: val for key, val in scalings.items() if key in types}
-    for idx, (key, val) in enumerate(scalings_plot.items()):
-        y_coord = (idx/len(scalings_plot))+.1
-        ax_scales.text(.1, y_coord+.15, round(val, 2))
+    for ch_type in ch_types:
+        y_coord = (len(ch_types))+.1
+        ax_scales.text(.1, y_coord+.15, 'testvalue')
+        # drawing the scale bar
         scalebar_coords = [y_coord, y_coord, y_coord, y_coord,
                            y_coord+.1, y_coord+.1, y_coord+.1]
-        line = mpl.lines.Line2D([.45, .5, .55, .5, .5, .45, .55],
+        scalebar_line = mpl.lines.Line2D([.45, .5, .55, .5, .5, .45, .55],
                                 scalebar_coords,
-                                color=color[key],
+                                color=color[ch_type],
                                 axes=ax_scales)
-        ax_scales.add_line(line)
+        ax_scales.add_line(scalebar_line)
     ax_scales.set_axis_off()
     ax_scales.set_title('Scales')
 
@@ -1249,21 +1248,28 @@ def _plot_traces(params):
         ch_start = params['ch_start']
         n_channels = params['n_channels']
         data = params['data'] * params['scale_factor']
-        scalings_plot = {key: val for key, val in params['scalings'].items()
-                            if key in params['types']}
         params['ax_scales'].texts = []
         ticks = offsets
         ticks = [ticks[x] if x < len(ticks) else 0 for x in range(20)]
-        for idx, (key, val) in enumerate(scalings_plot.items()):
-            y_coord = (idx/len(scalings_plot))+.1
+        ch_types = params['ch_types']
+        import matplotlib as mpl
+        ann = params['ann']
+        annotations = [child for child in params['ax2'].get_children()
+                        if isinstance(child, mpl.text.Annotation)]
+        for annote in annotations:
+            annote.remove()
+        ann[:] = list()
+        assert len(params['ann']) == 0
+        for ch_type in ch_types:
+            y_coord = (len(ch_types))+.1
             pos = (0, 1 - (ticks[ch_start] / ax.get_ylim()[0]))
 
             # params['ax_scales'].text(.1, y_coord+.15, round(val, 2))
-            params['ax2'].annotate('%s (%s)' % (round(val, 2), round(val, 2)),
+            ann.append(params['ax2'].annotate('%s (%s)' % ('testvalue1', 'testvalue2'),
                                    xy=pos, xytext=(-70, 0),
                                    ha='left', size=12, va='center',
                                    xycoords='axes fraction', rotation=90,
-                                   textcoords='offset points')
+                                   textcoords='offset points'))
 
     n_times = len(epochs.times)
     tick_list = list()
