@@ -1662,7 +1662,7 @@ def _compute_scalings(scalings, inst):
     else:
         data = inst._data
     if isinstance(inst, BaseEpochs):
-        data = inst._data.reshape([len(inst.ch_names), -1])
+        data = inst._data.swapaxes(0, 1).reshape([len(inst.ch_names), -1])
     # Iterate through ch types and update scaling if ' auto'
     for key, value in scalings.items():
         if value != 'auto':
@@ -1670,7 +1670,7 @@ def _compute_scalings(scalings, inst):
         if key not in ch_types.keys():
             raise ValueError("Sensor {} doesn't exist in data".format(key))
         this_data = data[ch_types[key]]
-        scale_factor = np.percentile(this_data.ravel(), [0.5, 99.5])
+        scale_factor = np.percentile(this_data.ravel(), (.5, 99.5))
         scale_factor = np.max(np.abs(scale_factor))
         scalings[key] = scale_factor
     return scalings

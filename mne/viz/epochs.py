@@ -1,3 +1,4 @@
+
 """Functions to plot epochs data."""
 
 # Authors: Alexandre Gramfort <alexandre.gramfort@telecom-paristech.fr>
@@ -451,6 +452,21 @@ def _prepare_tsargs_for_epochs_image(ts_args):
     ts_args_.update(**ts_args)
     ts_args_["vlines"] = []
     return ts_args_
+
+
+def _remove_annotations(params):
+    """Helper to remove annotations from picks."""
+    from matplotlib import text
+
+    ann = params['ann']
+    annotations = [child for child in params['ax2'].get_children()
+                   if isinstance(child, text.Annotation)]
+    for annote in annotations:
+        annote.remove()
+    ann[:] = list()
+    assert len(params['ann']) == 0
+
+    return ann
 
 
 def _prepare_epochs_image_im_data(data, times, ch_type, overlay_times, order,
@@ -1284,20 +1300,15 @@ def _plot_traces(params):
                 offset = offsets[line_idx]
 
                 # plotting the scaling bars
-                params['ax_scales'].texts = []
+                # params['ax_scales'].texts = []
                 ticks = offsets
 
                 ticks = [ticks[x] if x < len(ticks) else 0
                          for x in range(n_channels)]
                 ch_types = params['ch_types']
-                import matplotlib as mpl
-                ann = params['ann']
-                annotations = [child for child in params['ax2'].get_children()
-                               if isinstance(child, mpl.text.Annotation)]
-                for annote in annotations:
-                    annote.remove()
-                ann[:] = list()
-                assert len(params['ann']) == 0
+
+                ann = _remove_annotations(params)
+
                 print(types_plot)
                 for ch_type in ch_types:
                     if ch_type in types_plot:
@@ -1306,7 +1317,7 @@ def _plot_traces(params):
                     pos = (0, 1 - (ticks[ch_type_first] / ax.get_ylim()[0]))
                     # params['ax_scales'].text(.1, y_coord+.15, round(val, 2))
                     ann.append(params['ax2'].annotate(
-                        '%s (%s)' % (ch_type, str(ch_type_first)),
+                        '%s %s' % (ch_type, str(ch_type_first)),
                         xy=pos, xytext=(-80, 0),
                         ha='left', size=12, va='center',
                         xycoords='axes fraction', rotation=90,
@@ -1765,9 +1776,12 @@ def _prepare_butterfly(params):
     import matplotlib as mpl
     if params['butterfly']:
         units = _handle_default('units')
-        chan_types = sorted(set(params['types']) & set(params['order']),
-                            key=params['order'].index)
-        if len(chan_types) < 1:
+        chan_types_split = sorted(set(params['types']) &
+                                  set(_DATA_CH_TYPES_SPLIT),
+                                  key=params['order'].index)
+        # chan_types = sorted(set(params['types']) & set(params['order']),
+        #                     key=params['order'].index)
+        if len(chan_types_split) < 1:
             return
         params['ax_vscroll'].set_visible(False)
         ax = params['ax']
@@ -1775,22 +1789,16 @@ def _prepare_butterfly(params):
         for label in labels:
             label.set_visible(True)
         offsets = np.arange(0, ax.get_ylim()[0],
-                            ax.get_ylim()[0] / (4 * len(chan_types)))
+                            ax.get_ylim()[0] / (4 * len(chan_types_split)))
         ticks = offsets
         ticks = [ticks[x] if x < len(ticks) else 0 for x in range(20)]
         ax.set_yticks(ticks)
         used_types = 0
         params['offsets'] = [ticks[2]]
         # checking which annotations are displayed and removing them
-        ann = params['ann']
-        annotations = [child for child in params['ax2'].get_children()
-                       if isinstance(child, mpl.text.Annotation)]
-        for annote in annotations:
-            annote.remove()
-        ann[:] = list()
-        assert len(params['ann']) == 0
+        ann = _remove_annotations(params)
         titles = _handle_default('titles')
-        for chan_type in chan_types:
+        for chan_type in chan_types_split:
             unit = units[chan_type]
             pos = (0, 1 - (ticks[2 + 4 * used_types] / ax.get_ylim()[0]))
             ann.append(params['ax2'].annotate(
