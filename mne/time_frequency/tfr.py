@@ -45,8 +45,8 @@ def morlet(sfreq, freqs, n_cycles=7.0, sigma=None, zero_mean=False):
     sfreq : float
         The sampling Frequency.
     freqs : array
-        frequency range of interest (1 x Frequencies)
-    n_cycles: float | array of float, default 7.0
+        Frequency range of interest (1 x Frequencies).
+    n_cycles : float | array of float, default 7.0
         Number of cycles. Fixed number or one per frequency.
     sigma : float, default None
         It controls the width of the wavelet ie its temporal
@@ -584,7 +584,7 @@ def cwt(X, Ws, use_fft=True, mode='same', decim=1):
     See Also
     --------
     mne.time_frequency.tfr_morlet : Compute time-frequency decomposition
-                                    with Morlet wavelets
+                                    with Morlet wavelets.
     """
     decim = _check_decim(decim)
     n_signals, n_times = X[:, decim].shape
@@ -680,7 +680,6 @@ def tfr_morlet(inst, freqs, n_cycles, use_fft=False, return_itc=True, decim=1,
         If `slice`, returns tfr[..., decim].
 
         .. note:: Decimation may create aliasing artifacts.
-
     %(n_jobs)s
     picks : array-like of int | None, default None
         The indices of the channels to decompose. If None, all available
@@ -754,7 +753,6 @@ def tfr_array_morlet(epoch_data, sfreq, freqs, n_cycles=7.0,
         .. note::
             Decimation may create aliasing artifacts, yet decimation
             is done after the convolutions.
-
     output : str, default 'complex'
 
         * 'complex' : single trial complex.
@@ -764,10 +762,9 @@ def tfr_array_morlet(epoch_data, sfreq, freqs, n_cycles=7.0,
         * 'itc' : inter-trial coherence.
         * 'avg_power_itc' : average of single trial power and inter-trial
           coherence across trials.
-
     %(n_jobs)s
         The number of epochs to process at the same time. The parallelization
-        is implemented across channels. default 1
+        is implemented across channels. Default 1.
     %(verbose)s
 
     Returns
@@ -777,7 +774,7 @@ def tfr_array_morlet(epoch_data, sfreq, freqs, n_cycles=7.0,
         'phase', 'power'], then shape of out is (n_epochs, n_chans, n_freqs,
         n_times), else it is (n_chans, n_freqs, n_times). If output is
         'avg_power_itc', the real values code for 'avg_power' and the
-        imaginary values code for the 'itc': out = avg_power + i * itc
+        imaginary values code for the 'itc': out = avg_power + i * itc.
 
     See Also
     --------
@@ -813,7 +810,7 @@ def tfr_multitaper(inst, freqs, n_cycles, time_bandwidth=4.0,
     n_cycles : float | ndarray, shape (n_freqs,)
         The number of cycles globally or for each frequency.
         The time-window length is thus T = n_cycles / freq.
-    time_bandwidth : float, (optional), default 4.0 (n_tapers=3).
+    time_bandwidth : float, (optional), default 4.0 (n_tapers=3)
         Time x (Full) Bandwidth product. Should be >= 2.0.
         Choose this along with n_cycles to get desired frequency resolution.
         The number of good tapers (least leakage from far away frequencies)
@@ -832,7 +829,6 @@ def tfr_multitaper(inst, freqs, n_cycles, time_bandwidth=4.0,
         If `slice`, returns tfr[..., decim].
 
         .. note:: Decimation may create aliasing artifacts.
-
     %(n_jobs)s
     %(picks_good_data)s
     average : bool, default True
@@ -984,9 +980,9 @@ class _BaseTFR(ContainsMixin, UpdateChannelsMixin, SizeMixin):
         Parameters
         ----------
         fname : str
-            The file name, which should end with -tfr.h5 .
+            The file name, which should end with ``-tfr.h5``.
         overwrite : bool
-            If True, overwrite file (if it exists). Defaults to False
+            If True, overwrite file (if it exists). Defaults to False.
         """
         write_tfrs(fname, self, overwrite=overwrite)
 
@@ -1034,7 +1030,6 @@ class AverageTFR(_BaseTFR):
         Comment on dataset. Can be the condition.
     method : str | None, default None
         Comment on the method used to compute the data, e.g., morlet wavelet.
-
     """
 
     @verbose
@@ -1998,7 +1993,7 @@ class EpochsTFR(_BaseTFR, GetEpochsMixin):
         integers.
     metadata : instance of pandas.DataFrame | None
         A :class:`pandas.DataFrame` containing pertinent information for each
-        trial. See :class:`mne.Epochs` for further details
+        trial. See :class:`mne.Epochs` for further details.
     %(verbose)s
 
     Attributes
@@ -2244,12 +2239,12 @@ def write_tfrs(fname, tfr, overwrite=False):
 
     Parameters
     ----------
-    fname : string
-        The file name, which should end with -tfr.h5
+    fname : str
+        The file name, which should end with ``-tfr.h5``.
     tfr : AverageTFR instance, or list of AverageTFR instances
         The TFR dataset, or list of TFR datasets, to save in one file.
         Note. If .comment is not None, a name will be generated on the fly,
-        based on the order in which the TFR objects are passed
+        based on the order in which the TFR objects are passed.
     overwrite : bool
         If True, overwrite file (if it exists). Defaults to False.
 
@@ -2289,21 +2284,21 @@ def read_tfrs(fname, condition=None):
 
     Parameters
     ----------
-    fname : string
+    fname : str
         The file name, which should end with -tfr.h5 .
     condition : int or str | list of int or str | None
         The condition to load. If None, all conditions will be returned.
         Defaults to None.
-
-    See Also
-    --------
-    write_tfrs
 
     Returns
     -------
     tfrs : list of instances of AverageTFR | instance of AverageTFR
         Depending on `condition` either the TFR object or a list of multiple
         TFR objects.
+
+    See Also
+    --------
+    write_tfrs
 
     Notes
     -----

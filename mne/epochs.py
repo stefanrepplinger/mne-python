@@ -1682,6 +1682,11 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin,
             If true, move the time backwards or forwards by specified amount.
             Else, set the starting time point to the value of tshift.
 
+        Returns
+        -------
+        epochs : instance of Epochs
+            The modified Epochs instance.
+
         Notes
         -----
         Maximum accuracy of time shift is 1 / epochs.info['sfreq']
@@ -1696,6 +1701,7 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin,
         first = int(tshift * sfreq) + offset
         last = first + len(times) - 1
         self._set_times(np.arange(first, last + 1, dtype=np.float) / sfreq)
+        return self
 
 
 def _check_baseline(baseline, tmin, tmax, sfreq):
@@ -1774,9 +1780,9 @@ class Epochs(BaseEpochs):
         and a dict is created with string integer names corresponding
         to the event id integers.
     tmin : float
-        Start time before event. If nothing is provided, defaults to -0.2
+        Start time before event. If nothing is provided, defaults to -0.2.
     tmax : float
-        End time after event. If nothing is provided, defaults to 0.5
+        End time after event. If nothing is provided, defaults to 0.5.
     baseline : None or tuple of length 2 (default (None, 0))
         The time interval to apply baseline correction. If None do not apply
         it. If baseline is (a, b) the interval is between "a (s)" and "b (s)".
@@ -1787,7 +1793,7 @@ class Epochs(BaseEpochs):
         (a, b) includes both endpoints, i.e. all timepoints t such that
         a <= t <= b.
     %(picks_all)s
-    preload : boolean
+    preload : bool
         Load all epochs from disk when creating the object
         or wait before accessing each epoch (more memory
         efficient but can be slower).
@@ -1801,7 +1807,6 @@ class Epochs(BaseEpochs):
                           eeg=40e-6, # V (EEG channels)
                           eog=250e-6 # V (EOG channels)
                           )
-
     flat : dict | None
         Rejection parameters based on flatness of signal.
         Valid keys are 'grad' | 'mag' | 'eeg' | 'eog' | 'ecg', and values
@@ -1923,7 +1928,6 @@ class Epochs(BaseEpochs):
     For example with the event_id {'aud': 1, 'vis': 2} and the events
     [[0, 0, 1], [0, 0, 2]], the "merge" behavior will update both event_id and
     events to be: {'aud/vis': 3} and [[0, 0, 3], ] respectively.
-
     """
 
     @verbose
@@ -2053,6 +2057,12 @@ class EpochsArray(BaseEpochs):
         .. versionadded:: 0.16
     %(verbose)s
 
+    See Also
+    --------
+    create_info
+    EvokedArray
+    io.RawArray
+
     Notes
     -----
     Proper units of measure:
@@ -2063,12 +2073,6 @@ class EpochsArray(BaseEpochs):
     * M: hbo, hbr
     * Am: dipole
     * AU: misc
-
-    See Also
-    --------
-    create_info
-    EvokedArray
-    io.RawArray
     """
 
     @verbose
@@ -2478,7 +2482,7 @@ def read_epochs(fname, proj=True, preload=True, verbose=None):
     Returns
     -------
     epochs : instance of Epochs
-        The epochs
+        The epochs.
     """
     return EpochsFIF(fname, proj, preload, verbose)
 
@@ -2851,7 +2855,7 @@ def concatenate_epochs(epochs_list, add_offset=True):
     Parameters
     ----------
     epochs_list : list
-        list of Epochs instances to concatenate (in order).
+        List of Epochs instances to concatenate (in order).
     add_offset : bool
         If True, a fixed offset is added to the event times from different
         Epochs sets, such that they are easy to distinguish after the

@@ -389,7 +389,7 @@ def read_forward_solution(fname, include=(), exclude=(), verbose=None):
 
     Parameters
     ----------
-    fname : string
+    fname : str
         The file name, which should end with -fwd.fif or -fwd.fif.gz.
     include : list, optional
         List of names of channels to include. If empty all channels
@@ -578,7 +578,7 @@ def convert_forward_solution(fwd, surf_ori=False, force_fixed=False,
         Use surface-based source coordinate system? Note that force_fixed=True
         implies surf_ori=True.
     force_fixed : bool, optional (default False)
-        Force fixed source orientation mode?
+        If True, force fixed source orientation mode.
     copy : bool
         Whether to return a new instance or modify in place.
     use_cps : bool (default True)
@@ -1137,7 +1137,6 @@ def compute_depth_prior(forward, info, exp=0.8, limit=10.0,
           Use all channels. Not recommended since the depth weighting will be
           biased toward whichever channel type has the largest values in
           SI units (such as EEG being orders of magnitude larger than MEG).
-
     """
     from ..cov import Covariance, compute_whitener
     _validate_type(forward, Forward, 'forward')
@@ -1333,7 +1332,6 @@ def apply_forward(fwd, stc, info, start=None, stop=None, use_cps=True,
     evoked_template. The evoked_template should be from the same MEG system on
     which the original data was acquired. An exception will be raised if the
     forward operator contains channels that are not present in the template.
-
 
     Parameters
     ----------

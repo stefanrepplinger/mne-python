@@ -185,7 +185,7 @@ def plot_projs_topomap(projs, layout=None, cmap=None, sensors=True,
     Parameters
     ----------
     projs : list of Projection
-        The projections
+        The projections.
     %(proj_topomap_kwargs)s
     info : instance of Info | None
         The measurement information to use to determine the layout. If both
@@ -1045,8 +1045,7 @@ def plot_ica_components(ica, picks=None, ch_type=None, res=64,
         (None, True). Defaults to 'RdBu_r'.
 
         .. warning::  Interactive mode works smoothly only for a small amount
-            of topomaps.
-
+                      of topomaps.
     sensors : bool | str
         Add markers for sensor locations to the plot. Accepts matplotlib
         plot format string (e.g., 'r+' for red plusses). If True (default),
@@ -1087,7 +1086,7 @@ def plot_ica_components(ica, picks=None, ch_type=None, res=64,
         topomap you need to pass relevant data - instances of Raw or Epochs
         (for example the data that ICA was trained on). This takes effect
         only when running matplotlib in interactive mode.
-    plot_std: bool | float
+    plot_std : bool | float
         Whether to plot standard deviation in ERP/ERF and spectrum plots.
         Defaults to True, which plots one standard deviation above/below.
         If set to float allows to control how many standard deviations are
@@ -1107,7 +1106,6 @@ def plot_ica_components(ica, picks=None, ch_type=None, res=64,
         If None, no rejection is applied. The default is 'auto',
         which applies the rejection parameters used when fitting
         the ICA object.
-
 
     Returns
     -------
@@ -1886,7 +1884,7 @@ def plot_epochs_psd_topomap(epochs, bands=None, vmin=None, vmax=None,
     Parameters
     ----------
     epochs : instance of Epochs
-        The epochs object
+        The epochs object.
     bands : list of tuple | None
         The lower and upper frequency and the name for that band. If None,
         (default) expands to:
@@ -2612,7 +2610,7 @@ def plot_arrowmap(data, info_from, info_to=None, scale=1e-10, vmin=None,
         The measurement info to interpolate to. If None, it is assumed
         to be the same as info_from.
     scale : float, default 1e-10
-        To scale the arrows
+        To scale the arrows.
     vmin : float | callable | None
         The value specifying the lower bound of the color range.
         If None, and vmax is None, -vmax is used. Else np.min(data).
@@ -2695,7 +2693,7 @@ def plot_arrowmap(data, info_from, info_to=None, scale=1e-10, vmin=None,
     Returns
     -------
     fig : matplotlib.figure.Figure
-        The Figure of the plot
+        The Figure of the plot.
 
     Notes
     -----

@@ -42,6 +42,8 @@ Changelog
 
 - Add reader for ``*.dat`` electrode position files :func:`mne.channels.read_dig_dat` by `Christian Brodbeck`_
 
+- Improved :ref:`limo-dataset` usage and :ref:`example <ex-limo-data>` for usage of :func:`mne.stats.linear_regression` by `Jose Alanis`_
+
 - For KIT systems without built-in layout, :func:`mne.channels.find_layout` now falls back on an automatically generated layout, by `Christian Brodbeck`_
 
 - :meth:`mne.Epochs.plot` now takes a ``epochs_colors`` parameter to color specific epoch segments by `Mainak Jas`_
@@ -49,11 +51,15 @@ Changelog
 Bug
 ~~~
 
+- Fix :meth:`mne.Epochs.shift_time` and :meth:`mne.Evoked.shift_time` to return the modified :class:`~mne.Epochs` or :class:`~mne.Evoked` instance (instead of ``None``) by `Daniel McCloy`_.
+
 - Fix bug in :class:`~mne.preprocessing.ICA` where requesting extended infomax via ``fit_params={'extended': True}`` was overridden, by `Daniel McCloy`_.
 
 - Fix bug in :func:`mne.write_evokeds` where ``evoked.nave`` was not saved properly when multiple :class:`~mne.Evoked` instances were written to a single file, by `Eric Larson`_
 
 - Fix bug in :func:`mne.preprocessing.mark_flat` where acquisition skips were not handled proeprly, by `Eric Larson`_
+
+- Fix bug in :func:`mne.viz.plot_bem` where some sources were not plotted by `Jean-Remi King`_ and `Eric Larson`_
 
 - Fix TAL channel parsing (annotations) for EDF-D files by `Clemens Brunner`_
 

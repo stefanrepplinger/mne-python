@@ -302,10 +302,14 @@ class BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin, SetChannelsMixin,
         :meth:`mne.io.Raw.save`.
     orig_units : dict | None
         Dictionary mapping channel names to their units as specified in
-        the header file. Example: {'FC1': 'nV'}
+        the header file. Example: {'FC1': 'nV'}.
 
         .. versionadded:: 0.17
     %(verbose)s
+
+    See Also
+    --------
+    mne.io.Raw : Documentation of attribute and methods.
 
     Notes
     -----
@@ -318,10 +322,6 @@ class BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin, SetChannelsMixin,
 
         * _read_segment_file(self, data, idx, fi, start, stop, cals, mult)
           (only needed for types that support on-demand disk reads)
-
-    See Also
-    --------
-    mne.io.Raw : Documentation of attribute and methods.
     """
 
     @verbose
@@ -1680,7 +1680,7 @@ class BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin, SetChannelsMixin,
         Parameters
         ----------
         raws : list, or Raw instance
-            list of Raw instances to concatenate to the current instance
+            List of Raw instances to concatenate to the current instance
             (in order), or a single raw instance to concatenate.
         preload : bool, str, or None (default None)
             Preload data into memory for data manipulation and faster indexing.
@@ -2195,7 +2195,7 @@ def concatenate_raws(raws, preload=None, events_list=None, verbose=None):
     Parameters
     ----------
     raws : list
-        list of Raw instances to concatenate (in order).
+        List of Raw instances to concatenate (in order).
     preload : bool, or None
         If None, preload status is inferred using the preload status of the
         raw files passed in. True or False sets the resulting raw file to

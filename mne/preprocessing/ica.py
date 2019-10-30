@@ -78,7 +78,13 @@ def _make_xy_sfunc(func, ndim_output=False):
 
 # makes score funcs attr accessible for users
 def get_score_funcs():
-    """Get the score functions."""
+    """Get the score functions.
+
+    Returns
+    -------
+    score_funcs : dict
+        The score functions.
+    """
     from scipy import stats
     from scipy.spatial import distance
     score_funcs = Bunch()
@@ -1823,7 +1829,7 @@ def ica_find_eog_events(raw, eog_source=None, event_id=998, l_freq=1,
     Returns
     -------
     eog_events : array
-        Events
+        Events.
     """
     eog_events = _find_eog_events(eog_source[np.newaxis], event_id=event_id,
                                   l_freq=l_freq, h_freq=h_freq,

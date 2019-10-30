@@ -31,7 +31,7 @@ from .surface import (read_surface, write_surface, complete_surface_info,
                       _fast_cross_nd_sum, _get_solids)
 from .transforms import _ensure_trans, apply_trans, Transform
 from .utils import (verbose, logger, run_subprocess, get_subjects_dir, warn,
-                    _pl, _validate_type, _TempDir)
+                    _pl, _validate_type, _TempDir, get_config)
 from .fixes import einsum
 
 
@@ -308,17 +308,13 @@ def make_bem_solution(surfs, verbose=None):
     Parameters
     ----------
     surfs : list of dict
-        The BEM surfaces to use (`from make_bem_model`)
+        The BEM surfaces to use (from :func:`mne.make_bem_model`).
     %(verbose)s
 
     Returns
     -------
     bem : instance of ConductorModel
         The BEM solution.
-
-    Notes
-    -----
-    .. versionadded:: 0.10.0
 
     See Also
     --------
@@ -327,6 +323,10 @@ def make_bem_solution(surfs, verbose=None):
     write_bem_surfaces
     read_bem_solution
     write_bem_solution
+
+    Notes
+    -----
+    .. versionadded:: 0.10.0
     """
     logger.info('Approximation method : Linear collocation\n')
     if isinstance(surfs, str):
@@ -548,8 +548,7 @@ def make_bem_model(subject, ico=4, conductivity=(0.3, 0.006, 0.3),
         for a one-layer model, or three elements for a three-layer model.
         Defaults to ``[0.3, 0.006, 0.3]``. The MNE-C default for a
         single-layer model would be ``[0.3]``.
-    subjects_dir : string, or None
-        Path to SUBJECTS_DIR if it is not set in the environment.
+    %(subjects_dir)s
     %(verbose)s
 
     Returns
@@ -558,16 +557,16 @@ def make_bem_model(subject, ico=4, conductivity=(0.3, 0.006, 0.3),
         The BEM surfaces. Use `make_bem_solution` to turn these into a
         `ConductorModel` suitable for forward calculation.
 
-    Notes
-    -----
-    .. versionadded:: 0.10.0
-
     See Also
     --------
     make_bem_solution
     make_sphere_model
     read_bem_surfaces
     write_bem_surfaces
+
+    Notes
+    -----
+    .. versionadded:: 0.10.0
     """
     conductivity = np.array(conductivity, float)
     if conductivity.ndim != 1 or conductivity.size not in (1, 3):
@@ -744,14 +743,14 @@ def make_sphere_model(r0=(0., 0., 0.04), head_radius=0.09, info=None,
     sphere : instance of ConductorModel
         The resulting spherical conductor model.
 
-    Notes
-    -----
-    .. versionadded:: 0.9.0
-
     See Also
     --------
     make_bem_model
     make_bem_solution
+
+    Notes
+    -----
+    .. versionadded:: 0.9.0
     """
     for name in ('r0', 'head_radius'):
         param = locals()[name]
@@ -1154,7 +1153,8 @@ def make_watershed_bem(subject, subjects_dir=None, overwrite=False,
                                                  read_metadata=True)
             volume_info.update(new_info)  # replace volume info, 'head' stays
 
-            write_surface(s, rr, tris, volume_info=volume_info)
+            write_surface(s, rr, tris, volume_info=volume_info,
+                          overwrite=overwrite)
             # Create symbolic links
             surf_out = op.join(bem_dir, '%s.surf' % s)
             if not overwrite and op.exists(surf_out):
@@ -1225,7 +1225,7 @@ def read_bem_surfaces(fname, patch_stats=False, s_id=None, verbose=None):
 
     Parameters
     ----------
-    fname : string
+    fname : str
         The name of the file containing the surfaces.
     patch_stats : bool, optional (default False)
         Calculate and add cortical patch statistics to the surfaces.
@@ -1362,7 +1362,7 @@ def read_bem_solution(fname, verbose=None):
 
     Parameters
     ----------
-    fname : string
+    fname : str
         The file containing the BEM solution.
     %(verbose)s
 
@@ -1564,7 +1564,8 @@ def write_bem_solution(fname, bem):
 def _prepare_env(subject, subjects_dir, requires_freesurfer):
     """Prepare an env object for subprocess calls."""
     env = os.environ.copy()
-    if requires_freesurfer and not os.environ.get('FREESURFER_HOME'):
+    fs_home = get_config('FREESURFER_HOME')
+    if fs_home is None:
         raise RuntimeError('I cannot find freesurfer. The FREESURFER_HOME '
                            'environment variable is not set.')
 
@@ -1578,8 +1579,8 @@ def _prepare_env(subject, subjects_dir, requires_freesurfer):
     if not op.isdir(subject_dir):
         raise RuntimeError('Could not find the subject data directory "%s"'
                            % (subject_dir,))
-    env['SUBJECT'] = subject
-    env['SUBJECTS_DIR'] = subjects_dir
+    env.update(SUBJECT=subject, SUBJECTS_DIR=subjects_dir,
+               FREESURFER_HOME=fs_home)
     mri_dir = op.join(subject_dir, 'mri')
     bem_dir = op.join(subject_dir, 'bem')
     return env, mri_dir, bem_dir
@@ -1603,8 +1604,7 @@ def convert_flash_mris(subject, flash30=True, convert=True, unwarp=False,
         Run grad_unwarp with -unwarp option on each of the converted
         data sets. It requires FreeSurfer's MATLAB toolbox to be properly
         installed.
-    subjects_dir : string, or None
-        Path to SUBJECTS_DIR if it is not set in the environment.
+    %(subjects_dir)s
     %(verbose)s
 
     Notes
@@ -1752,8 +1752,7 @@ def make_flash_bem(subject, overwrite=False, show=True, subjects_dir=None,
         Write over existing .surf files in bem folder.
     show : bool
         Show surfaces to visually inspect all three BEM surfaces (recommended).
-    subjects_dir : string, or None
-        Path to SUBJECTS_DIR if it is not set in the environment.
+    %(subjects_dir)s
     flash_path : str | None
         Path to the flash images. If None (default), mri/flash/parameter_maps
         within the subject reconstruction is used.
