@@ -22,7 +22,6 @@ from ..io.meas_info import anonymize_info, Info
 from ..io.pick import (channel_type, pick_info, pick_types, _picks_by_type,
                        _check_excludes_includes, _contains_ch_type,
                        channel_indices_by_type, pick_channels, _picks_to_idx)
-from ..annotations import _handle_meas_date
 
 
 DEPRECATED_PARAM = object()
@@ -73,7 +72,8 @@ def _get_ch_type(inst, ch_type, allow_ref_meg=False):
     then grads, then ... to plot.
     """
     if ch_type is None:
-        allowed_types = ['mag', 'grad', 'planar1', 'planar2', 'eeg', 'csd']
+        allowed_types = ['mag', 'grad', 'planar1', 'planar2', 'eeg', 'csd',
+                         'fnirs_raw', 'fnirs_od', 'hbo', 'hbr']
         allowed_types += ['ref_meg'] if allow_ref_meg else []
         for type_ in allowed_types:
             if isinstance(inst, Info):
@@ -89,46 +89,86 @@ def _get_ch_type(inst, ch_type, allow_ref_meg=False):
 
 
 @verbose
-def equalize_channels(candidates, verbose=None):
-    """Equalize channel picks for a collection of MNE-Python objects.
+def equalize_channels(instances, copy=True, verbose=None):
+    """Equalize channel picks and ordering across multiple MNE-Python objects.
+
+    First, all channels that are not common to each object are dropped. Then,
+    using the first object in the list as a template, the channels of each
+    object are re-ordered to match the template. The end result is that all
+    given objects define the same channels, in the same order.
 
     Parameters
     ----------
-    candidates : list
-        Can be a list of Raw, Epochs, Evoked, or AverageTFR.
+    instances : list
+        A list of MNE-Python objects to equalize the channels for. Objects can
+        be of type Raw, Epochs, Evoked, AverageTFR, Forward, Covariance,
+        CrossSpectralDensity or Info.
+    copy : bool
+        When dropping and/or re-ordering channels, an object will be copied
+        when this parameter is set to ``True``. When set to ``False`` (the
+        default) the dropping and re-ordering of channels happens in-place.
+
+        .. versionadded:: 0.20.0
     %(verbose)s
+
+    Returns
+    -------
+    equalized_instances : list
+        A list of MNE-Python objects that have the same channels defined in the
+        same order.
 
     Notes
     -----
     This function operates inplace.
     """
+    from ..cov import Covariance
     from ..io.base import BaseRaw
+    from ..io.meas_info import Info
     from ..epochs import BaseEpochs
     from ..evoked import Evoked
-    from ..time_frequency import _BaseTFR
+    from ..forward import Forward
+    from ..time_frequency import _BaseTFR, CrossSpectralDensity
 
-    for candidate in candidates:
-        _validate_type(candidate,
-                       (BaseRaw, BaseEpochs, Evoked, _BaseTFR),
-                       "Instances to be modified",
-                       "Raw, Epochs, Evoked or TFR")
+    # Instances need to have a `ch_names` attribute and a `pick_channels`
+    # method that supports `ordered=True`.
+    allowed_types = (BaseRaw, BaseEpochs, Evoked, _BaseTFR, Forward,
+                     Covariance, CrossSpectralDensity, Info)
+    allowed_types_str = ("Raw, Epochs, Evoked, TFR, Forward, Covariance, "
+                         "CrossSpectralDensity or Info")
+    for inst in instances:
+        _validate_type(inst, allowed_types, "Instances to be modified",
+                       allowed_types_str)
 
-    chan_max_idx = np.argmax([c.info['nchan'] for c in candidates])
-    chan_template = candidates[chan_max_idx].ch_names
+    chan_template = instances[0].ch_names
     logger.info('Identifying common channels ...')
-    channels = [set(c.ch_names) for c in candidates]
+    channels = [set(inst.ch_names) for inst in instances]
     common_channels = set(chan_template).intersection(*channels)
-    dropped = list()
-    for c in candidates:
-        drop_them = list(set(c.ch_names) - common_channels)
-        if drop_them:
-            c.drop_channels(drop_them)
-            dropped.extend(drop_them)
+    all_channels = set(chan_template).union(*channels)
+    dropped = list(set(all_channels - common_channels))
+
+    # Preserve the order of chan_template
+    order = np.argsort([chan_template.index(ch) for ch in common_channels])
+    common_channels = np.array(list(common_channels))[order].tolist()
+
+    # Update all instances to match the common_channels list
+    reordered = False
+    equalized_instances = []
+    for inst in instances:
+        # Only perform picking when needed
+        if inst.ch_names != common_channels:
+            if copy:
+                inst = inst.copy()
+            inst.pick_channels(common_channels, ordered=True)
+            if len(inst.ch_names) == len(common_channels):
+                reordered = True
+        equalized_instances.append(inst)
+
     if dropped:
-        dropped = list(set(dropped))
         logger.info('Dropped the following channels:\n%s' % dropped)
-    else:
-        logger.info('all channels are corresponding, nothing to do.')
+    elif reordered:
+        logger.info('Channels have been re-ordered.')
+
+    return equalized_instances
 
 
 class ContainsMixin(object):
@@ -170,7 +210,13 @@ class ContainsMixin(object):
         return get_current_comp(self.info)
 
     def get_channel_types(self):
-        """Get a list of channel type for each channel."""
+        """Get a list of channel type for each channel.
+
+        Returns
+        -------
+        channel_types : list
+            The channel types.
+        """
         return [channel_type(self.info, n)
                 for n in range(len(self.info['ch_names']))]
 
@@ -472,7 +518,7 @@ class SetChannelsMixin(object):
         Parameters
         ----------
         %(montage)s
-        raise_if_subset: bool
+        raise_if_subset : bool
             If True, ValueError will be raised when montage.ch_names is a
             subset of info['ch_names']. This parameter was introduced for
             backward compatibility when set to False.
@@ -480,8 +526,13 @@ class SetChannelsMixin(object):
             Defaults to False in 0.19, it will change to default to True in
             0.20, and will be removed in 0.21.
 
-            .. versionadded: 0.19
+            .. versionadded:: 0.19
         %(verbose_meth)s
+
+        Returns
+        -------
+        inst : instance of Raw | Epochs | Evoked
+            The instance.
 
         Notes
         -----
@@ -577,15 +628,50 @@ class SetChannelsMixin(object):
                             show=show)
 
     @copy_function_doc_to_method_doc(anonymize_info)
-    def anonymize(self, daysback=None, keep_his=False):
+    def anonymize(self, daysback=None, keep_his=False, verbose=None):
         """
         .. versionadded:: 0.13.0
         """
-        anonymize_info(self.info, daysback=daysback, keep_his=keep_his)
+        anonymize_info(self.info, daysback=daysback, keep_his=keep_his,
+                       verbose=verbose)
+        self.set_meas_date(self.info['meas_date'])  # unify annot update
+        return self
+
+    def set_meas_date(self, meas_date):
+        """Set the measurement start date.
+
+        Parameters
+        ----------
+        meas_date : datetime | float | tuple | None
+            The new measurement date.
+            If datetime object, it must be timezone-aware and in UTC.
+            A tuple of (seconds, microseconds) or float (alias for
+            ``(meas_date, 0)``) can also be passed and a datetime
+            object will be automatically created. If None, will remove
+            the time reference.
+
+        Returns
+        -------
+        inst : instance of Raw | Epochs | Evoked
+            The modified raw instance. Operates in place.
+
+        See Also
+        --------
+        mne.io.Raw.anonymize
+
+        Notes
+        -----
+        If you want to remove all time references in the file, call
+        :func:`mne.io.anonymize_info(inst.info) <mne.io.anonymize_info>`
+        after calling ``inst.set_meas_date(None)``.
+
+        .. versionadded:: 0.20
+        """
+        from ..annotations import _handle_meas_date
+        meas_date = _handle_meas_date(meas_date)
+        self.info['meas_date'] = meas_date
         if hasattr(self, 'annotations'):
-            self.annotations.orig_time = \
-                _handle_meas_date(self.info['meas_date'])
-            self.annotations.onset -= self._first_time
+            self.annotations._orig_time = meas_date
         return self
 
 
@@ -618,7 +704,7 @@ class UpdateChannelsMixin(object):
             If True include ECG channels.
         emg : bool
             If True include EMG channels.
-        ref_meg: bool | str
+        ref_meg : bool | str
             If True include CTF / 4D reference channels. If 'auto', the
             reference channels are only included if compensations are present.
         misc : bool
@@ -651,13 +737,13 @@ class UpdateChannelsMixin(object):
             include channels measuring deoxyhemoglobin).
         csd : bool
             EEG-CSD channels.
-        include : list of string
+        include : list of str
             List of additional channels to include. If empty do not include
             any.
-        exclude : list of string | str
+        exclude : list of str | str
             List of channels to exclude. If 'bads' (default), exclude channels
             in ``info['bads']``.
-        selection : list of string
+        selection : list of str
             Restrict sensor channels (MEG, EEG) to this list of channel names.
         %(verbose_meth)s
 
@@ -682,13 +768,18 @@ class UpdateChannelsMixin(object):
             selection=selection)
         return self._pick_drop_channels(idx)
 
-    def pick_channels(self, ch_names):
+    def pick_channels(self, ch_names, ordered=False):
         """Pick some channels.
 
         Parameters
         ----------
         ch_names : list
             The list of channels to select.
+        ordered : bool
+            If True (default False), ensure that the order of the channels in
+            the modified instance matches the order of ``ch_names``.
+
+            .. versionadded:: 0.20.0
 
         Returns
         -------
@@ -710,7 +801,7 @@ class UpdateChannelsMixin(object):
         .. versionadded:: 0.9.0
         """
         return self._pick_drop_channels(
-            pick_channels(self.info['ch_names'], ch_names))
+            pick_channels(self.info['ch_names'], ch_names, ordered=ordered))
 
     @fill_doc
     def pick(self, picks, exclude=()):
@@ -842,7 +933,7 @@ class UpdateChannelsMixin(object):
         ----------
         add_list : list
             A list of objects to append to self. Must contain all the same
-            type as the current object
+            type as the current object.
         force_update_info : bool
             If True, force the info for objects to be appended to match the
             values in `self`. This should generally only be used when adding
