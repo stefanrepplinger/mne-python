@@ -52,7 +52,8 @@ edf_overlap_annot_path = op.join(data_path, 'EDF',
                                  'test_edf_overlapping_annotations.edf')
 edf_reduced = op.join(data_path, 'EDF', 'test_reduced.edf')
 bdf_stim_channel_path = op.join(data_path, 'BDF', 'test_bdf_stim_channel.bdf')
-
+bdf_multiple_annotations_path = op.join(data_path, 'BDF',
+                                        'multiple_annotation_chans.bdf')
 test_generator_bdf = op.join(data_path, 'BDF', 'test_generator_2.bdf')
 test_generator_edf = op.join(data_path, 'EDF', 'test_generator_2.edf')
 
@@ -196,18 +197,18 @@ def test_find_events_backward_compatibility():
 @pytest.mark.parametrize('fname', [edf_path, bdf_path])
 def test_to_data_frame(fname):
     """Test EDF/BDF Raw Pandas exporter."""
-    ext = op.splitext(fname)[1][1:].lower()
+    ext = op.splitext(fname)[1].lstrip('.').lower()
     if ext == 'edf':
         raw = read_raw_edf(fname, preload=True, verbose='error')
     elif ext == 'bdf':
         raw = read_raw_bdf(fname, preload=True, verbose='error')
     _, times = raw[0, :10]
-    df = raw.to_data_frame()
+    df = raw.to_data_frame(index='time')
     assert (df.columns == raw.ch_names).all()
     assert_array_equal(np.round(times * 1e3), df.index.values[:10])
     df = raw.to_data_frame(index=None, scalings={'eeg': 1e13})
-    assert 'time' in df.index.names
-    assert_array_equal(df.values[:, 0], raw._data[0] * 1e13)
+    assert 'time' in df.columns
+    assert_array_equal(df.values[:, 1], raw._data[0] * 1e13)
 
 
 def test_read_raw_edf_stim_channel_input_parameters():
@@ -345,6 +346,18 @@ def test_edf_stim_ch_pick_up(test_input, EXPECTED):
     raw = read_raw_edf(fname, stim_channel=test_input)
     ch_types = {ch['ch_name']: TYPE_LUT[ch['kind']] for ch in raw.info['chs']}
     assert ch_types == EXPECTED
+
+
+@testing.requires_testing_data
+def test_bdf_multiple_annotation_channels():
+    """Test BDF with multiple annotation channels."""
+    raw = read_raw_bdf(bdf_multiple_annotations_path)
+    assert len(raw.annotations) == 10
+    descriptions = np.array(['signal_start', 'EEG-check#1', 'TestStim#1',
+                             'TestStim#2', 'TestStim#3', 'TestStim#4',
+                             'TestStim#5', 'TestStim#6', 'TestStim#7',
+                             'Ligths-Off#1'], dtype='<U12')
+    assert_array_equal(descriptions, raw.annotations.description)
 
 
 run_tests_if_main()

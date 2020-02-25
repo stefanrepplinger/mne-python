@@ -114,55 +114,29 @@ class Dipole(object):
         s += ", tmax : %0.3f" % np.max(self.times)
         return "<Dipole  |  %s>" % s
 
-    def save(self, fname):
-        """Save dipole in a .dip file.
+    def save(self, fname, overwrite=False):
+        """Save dipole in a .dip or .bdip file.
 
         Parameters
         ----------
         fname : str
-            The name of the .dip file.
+            The name of the .dip or .bdip file.
+        overwrite : bool
+            If True, overwrite the file (if it exists).
+
+            .. versionadded:: 0.20
+
+        Notes
+        -----
+        .. versionchanged:: 0.20
+           Support for writing bdip (Xfit binary) files.
         """
         # obligatory fields
-        fmt = '  %7.1f %7.1f %8.2f %8.2f %8.2f %8.3f %8.3f %8.3f %8.3f %6.2f'
-        header = ('#   begin     end   X (mm)   Y (mm)   Z (mm)'
-                  '   Q(nAm)  Qx(nAm)  Qy(nAm)  Qz(nAm)    g/%')
-        t = self.times[:, np.newaxis] * 1000.
-        gof = self.gof[:, np.newaxis]
-        amp = 1e9 * self.amplitude[:, np.newaxis]
-        out = (t, t, self.pos / 1e-3, amp, self.ori * amp, gof)
-
-        # optional fields
-        fmts = dict(khi2=('    khi^2', ' %8.1f', 1.),
-                    nfree=('  free', ' %5d', 1),
-                    vol=('  vol/mm^3', ' %9.3f', 1e9),
-                    depth=('  depth/mm', ' %9.3f', 1e3),
-                    long=('  long/mm', ' %8.3f', 1e3),
-                    trans=('  trans/mm', ' %9.3f', 1e3),
-                    qlong=('  Qlong/nAm', ' %10.3f', 1e9),
-                    qtrans=('  Qtrans/nAm', ' %11.3f', 1e9),
-                    )
-        for key in ('khi2', 'nfree'):
-            data = getattr(self, key)
-            if data is not None:
-                header += fmts[key][0]
-                fmt += fmts[key][1]
-                out += (data[:, np.newaxis] * fmts[key][2],)
-        for key in ('vol', 'depth', 'long', 'trans', 'qlong', 'qtrans'):
-            data = self.conf.get(key)
-            if data is not None:
-                header += fmts[key][0]
-                fmt += fmts[key][1]
-                out += (data[:, np.newaxis] * fmts[key][2],)
-        out = np.concatenate(out, axis=-1)
-
-        # NB CoordinateSystem is hard-coded as Head here
-        with open(fname, 'wb') as fid:
-            fid.write('# CoordinateSystem "Head"\n'.encode('utf-8'))
-            fid.write((header + '\n').encode('utf-8'))
-            np.savetxt(fid, out, fmt=fmt)
-            if self.name is not None:
-                fid.write(('## Name "%s dipoles" Style "Dipoles"'
-                           % self.name).encode('utf-8'))
+        fname = _check_fname(fname, overwrite=overwrite)
+        if fname.endswith('.bdip'):
+            _write_dipole_bdip(fname, self)
+        else:
+            _write_dipole_text(fname, self)
 
     @fill_doc
     def crop(self, tmin=None, tmax=None, include_tmax=True):
@@ -511,10 +485,17 @@ def read_dipole(fname, verbose=None):
     Dipole
     DipoleFixed
     fit_dipole
+
+    Notes
+    -----
+    .. versionchanged:: 0.20
+       Support for reading bdip (Xfit binary) format.
     """
-    _check_fname(fname, overwrite='read', must_exist=True)
+    fname = _check_fname(fname, overwrite='read', must_exist=True)
     if fname.endswith('.fif') or fname.endswith('.fif.gz'):
         return _read_dipole_fixed(fname)
+    elif fname.endswith('.bdip'):
+        return _read_dipole_bdip(fname)
     else:
         return _read_dipole_text(fname)
 
@@ -610,6 +591,121 @@ def _read_dipole_text(fname):
     return Dipole(times, pos, amplitude, ori, gof, name, conf, khi2, nfree)
 
 
+def _write_dipole_text(fname, dip):
+    fmt = '  %7.1f %7.1f %8.2f %8.2f %8.2f %8.3f %8.3f %8.3f %8.3f %6.2f'
+    header = ('#   begin     end   X (mm)   Y (mm)   Z (mm)'
+              '   Q(nAm)  Qx(nAm)  Qy(nAm)  Qz(nAm)    g/%')
+    t = dip.times[:, np.newaxis] * 1000.
+    gof = dip.gof[:, np.newaxis]
+    amp = 1e9 * dip.amplitude[:, np.newaxis]
+    out = (t, t, dip.pos / 1e-3, amp, dip.ori * amp, gof)
+
+    # optional fields
+    fmts = dict(khi2=('    khi^2', ' %8.1f', 1.),
+                nfree=('  free', ' %5d', 1),
+                vol=('  vol/mm^3', ' %9.3f', 1e9),
+                depth=('  depth/mm', ' %9.3f', 1e3),
+                long=('  long/mm', ' %8.3f', 1e3),
+                trans=('  trans/mm', ' %9.3f', 1e3),
+                qlong=('  Qlong/nAm', ' %10.3f', 1e9),
+                qtrans=('  Qtrans/nAm', ' %11.3f', 1e9),
+                )
+    for key in ('khi2', 'nfree'):
+        data = getattr(dip, key)
+        if data is not None:
+            header += fmts[key][0]
+            fmt += fmts[key][1]
+            out += (data[:, np.newaxis] * fmts[key][2],)
+    for key in ('vol', 'depth', 'long', 'trans', 'qlong', 'qtrans'):
+        data = dip.conf.get(key)
+        if data is not None:
+            header += fmts[key][0]
+            fmt += fmts[key][1]
+            out += (data[:, np.newaxis] * fmts[key][2],)
+    out = np.concatenate(out, axis=-1)
+
+    # NB CoordinateSystem is hard-coded as Head here
+    with open(fname, 'wb') as fid:
+        fid.write('# CoordinateSystem "Head"\n'.encode('utf-8'))
+        fid.write((header + '\n').encode('utf-8'))
+        np.savetxt(fid, out, fmt=fmt)
+        if dip.name is not None:
+            fid.write(('## Name "%s dipoles" Style "Dipoles"'
+                       % dip.name).encode('utf-8'))
+
+
+_BDIP_ERROR_KEYS = ('depth', 'long', 'trans', 'qlong', 'qtrans')
+
+
+def _read_dipole_bdip(fname):
+    name = None
+    nfree = 0
+    with open(fname, 'rb') as fid:
+        # Which dipole in a multi-dipole set
+        times = list()
+        pos = list()
+        amplitude = list()
+        ori = list()
+        gof = list()
+        conf = dict(vol=list())
+        khi2 = list()
+        has_errors = None
+        while True:
+            num = np.frombuffer(fid.read(4), '>i4')
+            if len(num) == 0:
+                break
+            times.append(np.frombuffer(fid.read(4), '>f4')[0])
+            fid.read(4)  # end
+            fid.read(12)  # r0
+            pos.append(np.frombuffer(fid.read(12), '>f4'))
+            Q = np.frombuffer(fid.read(12), '>f4')
+            amplitude.append(np.linalg.norm(Q))
+            ori.append(Q / amplitude[-1])
+            gof.append(100 * np.frombuffer(fid.read(4), '>f4')[0])
+            this_has_errors = bool(np.frombuffer(fid.read(4), '>i4')[0])
+            if has_errors is None:
+                has_errors = this_has_errors
+                for key in _BDIP_ERROR_KEYS:
+                    conf[key] = list()
+            assert has_errors == this_has_errors
+            fid.read(4)  # Noise level used for error computations
+            limits = np.frombuffer(fid.read(20), '>f4')  # error limits
+            for key, lim in zip(_BDIP_ERROR_KEYS, limits):
+                conf[key].append(lim)
+            fid.read(100)  # (5, 5) fully describes the conf. ellipsoid
+            conf['vol'].append(np.frombuffer(fid.read(4), '>f4')[0])
+            khi2.append(np.frombuffer(fid.read(4), '>f4')[0])
+            fid.read(4)  # prob
+            fid.read(4)  # total noise estimate
+    return Dipole(times, pos, amplitude, ori, gof, name, conf, khi2, nfree)
+
+
+def _write_dipole_bdip(fname, dip):
+    with open(fname, 'wb+') as fid:
+        for ti, t in enumerate(dip.times):
+            fid.write(np.zeros(1, '>i4').tostring())  # int dipole
+            fid.write(np.array([t, 0]).astype('>f4').tostring())
+            fid.write(np.zeros(3, '>f4').tostring())  # r0
+            fid.write(dip.pos[ti].astype('>f4').tostring())  # pos
+            Q = dip.amplitude[ti] * dip.ori[ti]
+            fid.write(Q.astype('>f4').tostring())
+            fid.write(np.array(dip.gof[ti] / 100., '>f4').tostring())
+            has_errors = int(bool(len(dip.conf)))
+            fid.write(np.array(has_errors, '>i4').tostring())  # has_errors
+            fid.write(np.zeros(1, '>f4').tostring())  # noise level
+            for key in _BDIP_ERROR_KEYS:
+                val = dip.conf[key][ti] if key in dip.conf else 0.
+                assert val.shape == ()
+                fid.write(np.array(val, '>f4').tostring())
+            fid.write(np.zeros(25, '>f4').tostring())
+            conf = dip.conf['vol'][ti] if 'vol' in dip.conf else 0.
+            fid.write(np.array(conf, '>f4').tostring())
+            khi2 = dip.khi2[ti] if dip.khi2 is not None else 0
+            fid.write(np.array(khi2, '>f4').tostring())
+            fid.write(np.zeros(1, '>f4').tostring())  # prob
+            fid.write(np.zeros(1, '>f4').tostring())  # total noise est
+
+
 # #############################################################################
 # Fitting
 
@@ -632,7 +728,8 @@ def _dipole_forwards(fwd_data, whitener, rr, n_jobs=1):
     return B, B_orig, scales
 
 
-def _make_guesses(surf, grid, exclude, mindist, n_jobs):
+@verbose
+def _make_guesses(surf, grid, exclude, mindist, n_jobs=1, verbose=None):
     """Make a guess space inside a sphere or BEM surface."""
     if 'rr' in surf:
         logger.info('Guess surface (%s) is in %s coordinates'
@@ -696,16 +793,17 @@ def _fit_Q(fwd_data, whitener, B, B2, B_orig, rd, ori=None):
         uu, sing, vv = fwd_svd
         gof, one = _dipole_gof(uu, sing, vv, B, B2)
         ncomp = len(one)
-        # Counteract the effect of column normalization
-        Q = scales[0] * np.sum(uu.T[:ncomp] *
-                               (one / sing[:ncomp])[:, np.newaxis], axis=0)
+        one /= sing[:ncomp]
+        Q = np.dot(one, uu.T[:ncomp])
     else:
         fwd = np.dot(ori[np.newaxis], fwd)
         sing = np.linalg.norm(fwd)
         one = np.dot(fwd / sing, B)
         gof = (one * one)[0] / B2
-        Q = ori * (scales[0] * np.sum(one / sing))
+        Q = ori * np.sum(one / sing)
         ncomp = 3
+    # Counteract the effect of column normalization
+    Q *= scales[0]
     B_residual_noproj = B_orig - np.dot(fwd_orig.T, Q)
     return Q, gof, B_residual_noproj, ncomp
 
@@ -1001,7 +1099,7 @@ def _fit_dipole_fixed(min_dist_to_inner_skull, B_orig, t, guess_rrs,
 
 @verbose
 def fit_dipole(evoked, cov, bem, trans=None, min_dist=5., n_jobs=1,
-               pos=None, ori=None, verbose=None):
+               pos=None, ori=None, rank=None, verbose=None):
     """Fit a dipole.
 
     Parameters
@@ -1038,6 +1136,9 @@ def fit_dipole(evoked, cov, bem, trans=None, min_dist=5., n_jobs=1,
         for each time instant.
 
         .. versionadded:: 0.12
+    %(rank_None)s
+
+        .. versionadded:: 0.20
     %(verbose)s
 
     Returns
@@ -1214,7 +1315,7 @@ def fit_dipole(evoked, cov, bem, trans=None, min_dist=5., n_jobs=1,
     # whitener = np.dot(whitener, cov['eigvec'])
 
     whitener, _, rank = compute_whitener(cov, info, picks=picks,
-                                         return_rank=True)
+                                         rank=rank, return_rank=True)
 
     # Proceed to computing the fits (make_guess_data)
     if fixed_position:

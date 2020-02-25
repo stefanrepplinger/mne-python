@@ -99,7 +99,6 @@ File I/O
 .. autosummary::
    :toctree: generated
 
-   decimate_surface
    channel_type
    channel_indices_by_type
    get_head_surf
@@ -261,6 +260,7 @@ Visualization
    plot_sensors_connectivity
    plot_snr_estimate
    plot_source_estimates
+   link_brains
    plot_volume_source_estimates
    plot_vector_source_estimates
    plot_sparse_source_estimates
@@ -345,6 +345,8 @@ Projections:
 
    ICA
    Xdawn
+   annotate_movement
+   compute_average_dev_head_t
    compute_current_source_density
    compute_proj_ecg
    compute_proj_eog
@@ -363,6 +365,7 @@ Projections:
    read_ica
    run_ica
    corrmap
+   read_ica_eeglab
 
 :py:mod:`mne.preprocessing.nirs`:
 
@@ -379,6 +382,7 @@ Projections:
    beer_lambert_law
    source_detector_distances
    short_channels
+   scalp_coupling_index
 
 EEG referencing:
 
@@ -420,7 +424,10 @@ EEG referencing:
 .. autosummary::
    :toctree: generated/
 
-   calculate_head_pos_ctf
+   compute_chpi_amplitudes
+   compute_chpi_locs
+   compute_head_pos
+   extract_chpi_locs_ctf
    filter_chpi
    head_pos_to_trans_rot_t
    read_head_pos
@@ -465,6 +472,7 @@ Events
    write_events
    concatenate_epochs
    events_from_annotations
+   annotations_from_events
 
 :py:mod:`mne.event`:
 
@@ -582,6 +590,7 @@ Forward Modeling
    apply_forward_raw
    average_forward_solutions
    convert_forward_solution
+   decimate_surface
    dig_mri_distances
    forward.compute_depth_prior
    forward.compute_orient_prior
