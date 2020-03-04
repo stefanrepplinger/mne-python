@@ -10,6 +10,7 @@
 import gc
 import os.path as op
 from pathlib import Path
+import sys
 
 import numpy as np
 from numpy.testing import assert_array_equal, assert_allclose
@@ -37,7 +38,8 @@ from mne.viz._3d import _process_clim, _linearize_map, _get_map_ticks
 from mne.viz.utils import _fake_click
 from mne.utils import (requires_mayavi, requires_pysurfer, run_tests_if_main,
                        requires_nibabel, check_version, requires_dipy,
-                       traits_test, requires_version, catch_logging)
+                       traits_test, requires_version, catch_logging,
+                       run_subprocess, modified_env)
 from mne.datasets import testing
 from mne.source_space import read_source_spaces
 from mne.bem import read_bem_solution, read_bem_surfaces
@@ -637,7 +639,7 @@ def test_plot_volume_source_estimates_morph():
 @requires_pysurfer
 @requires_mayavi
 @traits_test
-def test_plot_vector_source_estimates():
+def test_plot_vector_source_estimates(garbage_collect):
     """Test plotting of vector source estimates."""
     sample_src = read_source_spaces(src_fname)
 
@@ -719,7 +721,7 @@ def test_brain_colorbar(orientation, diverging, lims):
 @requires_pysurfer
 @testing.requires_testing_data
 @traits_test
-def test_mixed_sources_plot_surface():
+def test_mixed_sources_plot_surface(garbage_collect):
     """Test plot_surface() for  mixed source space."""
     src = read_source_spaces(fwd_fname2)
     N = np.sum([s['nuse'] for s in src])  # number of sources
@@ -766,6 +768,17 @@ def test_link_brains(renderer_interactive):
         clim='auto'
     )
     link_brains(brain)
+
+
+def test_renderer(renderer):
+    """Test that renderers are available on demand."""
+    backend = renderer.get_3d_backend()
+    cmd = [sys.executable, '-uc',
+           'import mne; mne.viz.create_3d_figure((800, 600)); '
+           'backend = mne.viz.get_3d_backend(); '
+           'assert backend == %r, backend' % (backend,)]
+    with modified_env(MNE_3D_BACKEND=backend):
+        run_subprocess(cmd)
 
 
 run_tests_if_main()

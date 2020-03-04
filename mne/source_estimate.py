@@ -492,8 +492,9 @@ class _BaseSourceEstimate(TimeMixin):
             kernel, sens_data = data
             data = None
             if kernel.shape[1] != sens_data.shape[0]:
-                raise ValueError('kernel and sens_data have invalid '
-                                 'dimensions')
+                raise ValueError('kernel (%s) and sens_data (%s) have invalid '
+                                 'dimensions'
+                                 % (kernel.shape, sens_data.shape))
             if sens_data.ndim != 2:
                 raise ValueError('The sensor data must have 2 dimensions, got '
                                  '%s' % (sens_data.ndim,))
@@ -1519,11 +1520,13 @@ class SourceEstimate(_BaseSurfaceSourceEstimate):
     @copy_function_doc_to_method_doc(plot_source_estimates)
     def plot(self, subject=None, surface='inflated', hemi='lh',
              colormap='auto', time_label='auto', smoothing_steps=10,
-             transparent=True, alpha=1.0, time_viewer=False, subjects_dir=None,
+             transparent=True, alpha=1.0, time_viewer=False,
+             subjects_dir=None,
              figure=None, views='lat', colorbar=True, clim='auto',
              cortex="classic", size=800, background="black",
              foreground="white", initial_time=None, time_unit='s',
-             backend='auto', spacing='oct6', title=None, verbose=None):
+             backend='auto', spacing='oct6', title=None,
+             show_traces=False, verbose=None):
         brain = plot_source_estimates(
             self, subject, surface=surface, hemi=hemi, colormap=colormap,
             time_label=time_label, smoothing_steps=smoothing_steps,
@@ -1532,7 +1535,8 @@ class SourceEstimate(_BaseSurfaceSourceEstimate):
             colorbar=colorbar, clim=clim, cortex=cortex, size=size,
             background=background, foreground=foreground,
             initial_time=initial_time, time_unit=time_unit, backend=backend,
-            spacing=spacing, title=title, verbose=verbose)
+            spacing=spacing, title=title, show_traces=show_traces,
+            verbose=verbose)
         return brain
 
     @verbose

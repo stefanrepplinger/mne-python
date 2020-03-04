@@ -203,7 +203,8 @@ def mne_analyze_colormap(limits=[5, 10, 15], format='mayavi'):
     Returns
     -------
     cmap : instance of colormap | array
-        A teal->blue->gray->red->yellow colormap.
+        A teal->blue->gray->red->yellow colormap. See docstring of the 'format'
+        argument for further details.
 
     Notes
     -----
@@ -1973,7 +1974,7 @@ class DraggableColorbar(object):
         elif self.index >= len(self.cycle):
             self.index = 0
         cmap = self.cycle[self.index]
-        self.cbar.set_cmap(cmap)
+        self.cbar.mappable.set_cmap(cmap)
         self.cbar.draw_all()
         self.mappable.set_cmap(cmap)
         self.mappable.set_norm(self.cbar.norm)
