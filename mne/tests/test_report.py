@@ -55,12 +55,14 @@ def test_render_report(renderer, tmpdir):
     """Test rendering -*.fif files for mne report."""
     tempdir = str(tmpdir)
     raw_fname_new = op.join(tempdir, 'temp_raw.fif')
+    raw_fname_new_bids = op.join(tempdir, 'temp_meg.fif')
     ms_fname_new = op.join(tempdir, 'temp_ms_raw.fif')
     event_fname_new = op.join(tempdir, 'temp_raw-eve.fif')
     cov_fname_new = op.join(tempdir, 'temp_raw-cov.fif')
     fwd_fname_new = op.join(tempdir, 'temp_raw-fwd.fif')
     inv_fname_new = op.join(tempdir, 'temp_raw-inv.fif')
     for a, b in [[raw_fname, raw_fname_new],
+                 [raw_fname, raw_fname_new_bids],
                  [ms_fname, ms_fname_new],
                  [event_fname, event_fname_new],
                  [cov_fname, cov_fname_new],
@@ -252,8 +254,11 @@ def test_render_mri(renderer, tmpdir):
     assert repr(report)
     report.add_bem_to_section('sample', caption='extra', section='foo',
                               subjects_dir=subjects_dir, decim=30)
-    report.save(op.join(tempdir, 'report.html'), open_browser=False,
-                overwrite=True)
+    fname = op.join(tempdir, 'report.html')
+    report.save(fname, open_browser=False, overwrite=True)
+    with open(fname, 'r') as fid:
+        html = fid.read()
+    assert 'class="report_foo"' in html
 
 
 @testing.requires_testing_data
@@ -267,6 +272,8 @@ def test_render_mri_without_bem(tmpdir):
     report = Report(info_fname=raw_fname,
                     subject='sample', subjects_dir=tempdir)
     report.parse_folder(tempdir, render_bem=False)
+    with pytest.warns(RuntimeWarning, match='No BEM surfaces found'):
+        report.parse_folder(tempdir, render_bem=True, mri_decim=20)
     report.save(op.join(tempdir, 'report.html'), open_browser=False)
 
 
@@ -306,7 +313,7 @@ def test_add_slider_to_section(tmpdir):
     # Smoke test that SVG w/unicode can be added
     report = Report()
     fig, ax = plt.subplots()
-    ax.set_xlabel(u'μ')
+    ax.set_xlabel('µ')
     report.add_slider_to_section([fig] * 2, image_format='svg')
 
 

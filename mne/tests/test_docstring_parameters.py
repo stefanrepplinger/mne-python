@@ -64,6 +64,7 @@ docstring_ignores = {
     'mne.fixes',
     'mne.io.write',
     'mne.io.meas_info.Info',
+    'mne.utils.docs.deprecated',
 }
 char_limit = 800  # XX eventually we should probably get this lower
 tab_ignores = [
@@ -80,7 +81,7 @@ error_ignores = {
     'SA04',  # no description in See Also
     'PR04',  # Parameter "shape (n_channels" has no type
     'RT02',  # The first line of the Returns section should contain only the type, unless multiple values are being returned  # noqa
-   # XXX should also verify that | is used rather than , to separate params
+    # XXX should also verify that | is used rather than , to separate params
     # XXX should maybe also restore the parameter-desc-length < 800 char check
 }
 subclass_name_ignores = (
@@ -220,7 +221,6 @@ detrend
 dir_tree_find
 fast_cross_3d
 fiff_open
-find_outliers
 find_source_space_hemi
 find_tag
 get_score_funcs
@@ -228,7 +228,6 @@ get_version
 invert_transform
 is_power2
 is_fixed_orient
-iter_topography
 kit2fiff
 label_src_vertno_sel
 make_eeg_average_ref_proj
@@ -246,10 +245,10 @@ prepare_inverse_operator
 read_bad_channels
 read_fiducials
 read_tag
-requires_sample_data
 rescale
 setup_proj
 source_estimate_quantification
+tddr
 whiten_evoked
 write_fiducials
 write_info

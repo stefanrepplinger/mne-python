@@ -297,3 +297,11 @@
 .. _Sophie Herbst: https://github.com/SophieHerbst
 
 .. _Adam Li: http://github.com/adam2392
+
+.. _Ramiro Gatti: https://github.com/ragatti
+
+.. _Svea Marie Meyer: https://github.com/SveaMeyer13
+
+.. _Lx37: https://github.com/Lx37
+
+.. _Kyle Mathewson: https://github.com/kylemath

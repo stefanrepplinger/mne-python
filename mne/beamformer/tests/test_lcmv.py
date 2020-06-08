@@ -10,7 +10,7 @@ from numpy.testing import (assert_array_almost_equal, assert_array_equal,
                            assert_array_less)
 
 import mne
-from mne import (convert_forward_solution, read_forward_solution,
+from mne import (convert_forward_solution, read_forward_solution, compute_rank,
                  VolVectorSourceEstimate, VolSourceEstimate)
 from mne.datasets import testing
 from mne.beamformer import (make_lcmv, apply_lcmv, apply_lcmv_epochs,
@@ -68,7 +68,8 @@ def _get_data(tmin=-0.1, tmax=0.15, all_forward=True, epochs=True,
     raw.info['bads'] = ['MEG 2443', 'EEG 053']  # 2 bad channels
     # Set up pick list: MEG - bad channels
     left_temporal_channels = mne.read_selection('Left-temporal')
-    picks = mne.pick_types(raw.info, selection=left_temporal_channels)
+    picks = mne.pick_types(raw.info, meg=True,
+                           selection=left_temporal_channels)
     picks = picks[::2]  # decimate for speed
     # add a couple channels we will consider bad
     bad_picks = [100, 101]
@@ -91,7 +92,8 @@ def _get_data(tmin=-0.1, tmax=0.15, all_forward=True, epochs=True,
             baseline=(None, 0), preload=epochs_preload, reject=reject)
         if epochs_preload:
             epochs.resample(200, npad=0)
-        epochs.crop(0, None)
+        with pytest.warns(RuntimeWarning, match='baseline = None'):
+            epochs.crop(0, None)
         evoked = epochs.average()
         info = evoked.info
     else:
@@ -104,7 +106,8 @@ def _get_data(tmin=-0.1, tmax=0.15, all_forward=True, epochs=True,
     noise_cov = mne.cov.regularize(noise_cov, info, mag=0.05, grad=0.05,
                                    eeg=0.1, proj=True, rank=None)
     if data_cov:
-        data_cov = mne.compute_covariance(epochs, tmin=0.04, tmax=0.145)
+        data_cov = mne.compute_covariance(
+            epochs, tmin=0.04, tmax=0.145, verbose='error')  # baseline warning
     else:
         data_cov = None
 
@@ -553,7 +556,8 @@ def test_tf_lcmv():
 
     # Set up pick list: MEG - bad channels
     left_temporal_channels = mne.read_selection('Left-temporal')
-    picks = mne.pick_types(raw.info, selection=left_temporal_channels)
+    picks = mne.pick_types(raw.info, meg=True,
+                           selection=left_temporal_channels)
     picks = picks[::2]  # decimate for speed
     raw.pick_channels([raw.ch_names[ii] for ii in picks])
     raw.info.normalize_proj()  # avoid projection warnings
@@ -702,7 +706,7 @@ def test_lcmv_reg_proj(proj, weight_norm):
     """Test LCMV with and without proj."""
     raw = mne.io.read_raw_fif(fname_raw, preload=True)
     events = mne.find_events(raw)
-    raw.pick_types()
+    raw.pick_types(meg=True)
     assert len(raw.ch_names) == 305
     epochs = mne.Epochs(raw, events, None, preload=True, proj=proj)
     with pytest.warns(RuntimeWarning, match='Too few samples'):
@@ -718,7 +722,7 @@ def test_lcmv_reg_proj(proj, weight_norm):
     with pytest.raises(ValueError, match='several sensor types'):
         make_lcmv(epochs.info, forward, data_cov, reg=0.05,
                   noise_cov=None)
-    epochs.pick_types('grad')
+    epochs.pick_types(meg='grad')
     kwargs = dict(reg=0.05, pick_ori=None, weight_norm=weight_norm)
     filters_cov = make_lcmv(epochs.info, forward, data_cov,
                             noise_cov=noise_cov, **kwargs)
@@ -788,7 +792,7 @@ def test_localization_bias_fixed(bias_params_fixed, reg, weight_norm, use_cov,
     """Test localization bias for fixed-orientation LCMV."""
     evoked, fwd, noise_cov, data_cov, want = bias_params_fixed
     if not use_cov:
-        evoked.pick_types('grad')
+        evoked.pick_types(meg='grad')
         noise_cov = None
     assert data_cov['data'].shape[0] == len(data_cov['names'])
     loc = apply_lcmv(evoked, make_lcmv(evoked.info, fwd, data_cov, reg,
@@ -821,7 +825,7 @@ def test_localization_bias_free(bias_params_free, reg, pick_ori, weight_norm,
     """Test localization bias for free-orientation LCMV."""
     evoked, fwd, noise_cov, data_cov, want = bias_params_free
     if not use_cov:
-        evoked.pick_types('grad')
+        evoked.pick_types(meg='grad')
         noise_cov = None
     loc = apply_lcmv(evoked, make_lcmv(evoked.info, fwd, data_cov, reg,
                                        noise_cov, pick_ori=pick_ori,
@@ -850,6 +854,23 @@ def test_depth_does_not_matter(bias_params_free, weight_norm, pick_ori):
         d2 *= np.sign(np.dot(d1.ravel(), d2.ravel()))
         atol = np.linalg.norm(d1) * 1e-7
         assert_allclose(d1, d2, atol=atol)
+
+
+def test_lcmv_maxfiltered():
+    """Test LCMV on maxfiltered data."""
+    raw = mne.io.read_raw_fif(fname_raw).fix_mag_coil_types()
+    raw_sss = mne.preprocessing.maxwell_filter(raw)
+    events = mne.find_events(raw_sss)
+    del raw
+    raw_sss.pick_types(meg='mag')
+    assert len(raw_sss.ch_names) == 102
+    epochs = mne.Epochs(raw_sss, events)
+    data_cov = mne.compute_covariance(epochs, tmin=0)
+    fwd = mne.read_forward_solution(fname_fwd)
+    rank = compute_rank(data_cov, info=epochs.info)
+    assert rank == {'mag': 71}
+    for use_rank in ('info', rank, 'full', None):
+        make_lcmv(epochs.info, fwd, data_cov, rank=use_rank)
 
 
 run_tests_if_main()

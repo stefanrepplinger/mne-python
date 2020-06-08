@@ -24,16 +24,14 @@ from mne import (read_cov, read_forward_solution, read_evokeds, pick_types,
                  pick_types_forward, make_forward_solution, EvokedArray,
                  convert_forward_solution, Covariance, combine_evoked,
                  SourceEstimate, make_sphere_model, make_ad_hoc_cov,
-                 pick_channels_forward)
+                 pick_channels_forward, compute_raw_covariance)
 from mne.io import read_raw_fif
 from mne.io.proj import make_projector
-from mne.minimum_norm.inverse import (apply_inverse, read_inverse_operator,
-                                      apply_inverse_raw, apply_inverse_epochs,
-                                      make_inverse_operator,
-                                      write_inverse_operator,
-                                      compute_rank_inverse,
-                                      prepare_inverse_operator,
-                                      INVERSE_METHODS)
+from mne.minimum_norm import (apply_inverse, read_inverse_operator,
+                              apply_inverse_raw, apply_inverse_epochs,
+                              make_inverse_operator, apply_inverse_cov,
+                              write_inverse_operator, prepare_inverse_operator,
+                              compute_rank_inverse, INVERSE_METHODS)
 from mne.utils import _TempDir, run_tests_if_main, catch_logging
 
 test_path = testing.data_path(download=False)
@@ -62,8 +60,10 @@ fname_vol_inv = op.join(s_path,
                         'sample_audvis_trunc-meg-vol-7-meg-inv.fif')
 # trans and bem needed for channel reordering tests incl. forward computation
 fname_trans = op.join(s_path, 'sample_audvis_trunc-trans.fif')
-s_path_bem = op.join(test_path, 'subjects', 'sample', 'bem')
+subjects_dir = op.join(test_path, 'subjects')
+s_path_bem = op.join(subjects_dir, 'sample', 'bem')
 fname_bem = op.join(s_path_bem, 'sample-320-320-320-bem-sol.fif')
+fname_bem_homog = op.join(s_path_bem, 'sample-320-bem-sol.fif')
 src_fname = op.join(s_path_bem, 'sample-oct-4-src.fif')
 
 snr = 3.0
@@ -558,23 +558,32 @@ def test_orientation_prior(bias_params_free, method, looses, vmin, vmax,
 def test_inverse_residual(evoked, method):
     """Test MNE inverse application."""
     # use fname_inv as it will be faster than fname_full (fewer verts and chs)
-    evoked = evoked.pick_types()
+    evoked = evoked.pick_types(meg=True)
     inv = read_inverse_operator(fname_inv_fixed_depth)
     fwd = read_forward_solution(fname_fwd)
     pick_channels_forward(fwd, evoked.ch_names, copy=False)
     fwd = convert_forward_solution(fwd, force_fixed=True, surf_ori=True)
     matcher = re.compile(r'.* ([0-9]?[0-9]?[0-9]?\.[0-9])% variance.*')
 
+    # make it complex to ensure we handle it properly
+    evoked.data = 1j * evoked.data
     with catch_logging() as log:
         stc, residual = apply_inverse(
             evoked, inv, method=method, return_residual=True, verbose=True)
+    # revert the complex-ification (except STC, allow that to be complex still)
+    assert_array_equal(residual.data.real, 0)
+    residual.data = (-1j * residual.data).real
+    evoked.data = (-1j * evoked.data).real
+    # continue testing
     log = log.getvalue()
     match = matcher.match(log.replace('\n', ' '))
     assert match is not None
     match = float(match.group(1))
     assert 45 < match < 50
     if method not in ('dSPM', 'sLORETA'):
+        # revert effects of STC being forced to be complex
         recon = apply_forward(fwd, stc, evoked.info)
+        recon.data = (-1j * recon.data).real
         proj_op = make_projector(evoked.info['projs'], evoked.ch_names)[0]
         recon.data[:] = np.dot(proj_op, recon.data)
         residual_fwd = evoked.copy()
@@ -673,8 +682,6 @@ def test_make_inverse_operator_vector(evoked, noise_cov):
     inv_1 = make_inverse_operator(evoked.info, fwd, noise_cov, loose=1)
     inv_2 = make_inverse_operator(evoked.info, fwd_surf, noise_cov, depth=None,
                                   use_cps=True)
-    inv_3 = make_inverse_operator(evoked.info, fwd_surf, noise_cov, fixed=True,
-                                  use_cps=True)
     inv_4 = make_inverse_operator(evoked.info, fwd, noise_cov,
                                   loose=.2, depth=None)
 
@@ -687,10 +694,6 @@ def test_make_inverse_operator_vector(evoked, noise_cov):
             stc_vec = apply_inverse(evoked, inv, pick_ori='vector',
                                     method=method)
             assert_allclose(stc.data, stc_vec.magnitude().data)
-
-    # Vector estimates don't work when using fixed orientations
-    with pytest.raises(RuntimeError, match='fixed orientation'):
-        apply_inverse(evoked, inv_3, pick_ori='vector')
 
     # When computing with vector fields, computing the difference between two
     # evokeds and then performing the inverse should yield the same result as
@@ -795,6 +798,57 @@ def test_io_inverse_operator():
     _compare(inv_prep, inv_read_prep)
     inv_prep_prep = prepare_inverse_operator(inv_prep, *args)
     _compare(inv_prep, inv_prep_prep)
+
+
+# eLORETA is slow and we can trust that it will work because we just route
+# through apply_inverse
+_fast_methods = list(INVERSE_METHODS)
+_fast_methods.pop(_fast_methods.index('eLORETA'))
+
+
+@testing.requires_testing_data
+@pytest.mark.parametrize('method', _fast_methods)
+@pytest.mark.parametrize('pick_ori', ['normal', None])
+def test_apply_inverse_cov(method, pick_ori):
+    """Test MNE with precomputed inverse operator on cov."""
+    raw = read_raw_fif(fname_raw, preload=True)
+    # use 10 sec of data
+    raw.crop(0, 10)
+
+    raw.filter(1, None)
+    label_lh = read_label(fname_label % 'Aud-lh')
+
+    # test with a free ori inverse
+    inverse_operator = read_inverse_operator(fname_inv)
+
+    data_cov = compute_raw_covariance(raw, tstep=None)
+
+    with pytest.raises(ValueError, match='has not been prepared'):
+        apply_inverse_cov(data_cov, raw.info, inverse_operator,
+                          lambda2=lambda2, prepared=True)
+
+    this_inv_op = prepare_inverse_operator(inverse_operator, nave=1,
+                                           lambda2=lambda2, method=method)
+
+    raw_ori = 'normal' if pick_ori == 'normal' else 'vector'
+    stc_raw = apply_inverse_raw(
+        raw, this_inv_op, lambda2, method, label=label_lh, nave=1,
+        pick_ori=raw_ori, prepared=True)
+    stc_cov = apply_inverse_cov(
+        data_cov, raw.info, this_inv_op, method=method, pick_ori=pick_ori,
+        label=label_lh, prepared=True, lambda2=lambda2)
+    n_sources = np.prod(stc_cov.data.shape[:-1])
+    raw_data = stc_raw.data.reshape(n_sources, -1)
+    exp_res = np.diag(np.cov(raw_data, ddof=1)).copy()
+    exp_res *= 1 if raw_ori == pick_ori else 3.
+    # There seems to be some precision penalty when combining orientations,
+    # but it's probably acceptable
+    rtol = 5e-4 if pick_ori is None else 1e-12
+    assert_allclose(exp_res, stc_cov.data.ravel(), rtol=rtol)
+
+    with pytest.raises(ValueError, match='Invalid value'):
+        apply_inverse_cov(
+            data_cov, raw.info, this_inv_op, method=method, pick_ori='vector')
 
 
 @testing.requires_testing_data
@@ -981,6 +1035,38 @@ def test_inverse_ctf_comp():
     raw.apply_gradient_compensation(0)
     with pytest.raises(RuntimeError, match='Compensation grade .* not match'):
         apply_inverse_raw(raw, inv, 1. / 9.)
+
+
+def test_inverse_mixed(all_src_types_inv_evoked):
+    """Test creating and applying an inverse to mixed source spaces."""
+    stcs = dict()
+    invs, evoked = all_src_types_inv_evoked
+    for kind, klass in [('surface', mne.VectorSourceEstimate),
+                        ('volume', mne.VolVectorSourceEstimate),
+                        ('mixed', mne.MixedVectorSourceEstimate)]:
+        assert invs[kind]['src'].kind == kind
+        with pytest.warns(RuntimeWarning, match='has magnitude'):
+            stc = apply_inverse(evoked, invs[kind])
+        assert isinstance(stc, klass._scalar_class)
+        with pytest.warns(RuntimeWarning, match='has magnitude'):
+            stc_vec = apply_inverse(evoked, invs[kind], pick_ori='vector')
+        stcs[kind] = stc_vec
+        assert isinstance(stc_vec, klass)
+        assert_allclose(stc.data, stc_vec.magnitude().data, atol=1e-2)
+    # Check class equivalences, need to force the mixed to have the same
+    # data as the other two
+    surf_src = invs['surface']['src']
+    stcs['mixed'].data = np.concatenate(
+        [stcs['surface'].data, stcs['volume'].data], axis=0)
+    for kind in ('surface', 'volume'):
+        assert_allclose(getattr(stcs['mixed'], kind)().data,
+                        stcs[kind].data)
+        assert_allclose(getattr(stcs['mixed'].magnitude(), kind)().data,
+                        stcs[kind].magnitude().data)
+        assert_allclose(getattr(stcs['mixed'], kind)().magnitude().data,
+                        stcs[kind].magnitude().data)
+    assert_allclose(stcs['mixed'].surface().normal(surf_src).data,
+                    stcs['surface'].normal(surf_src).data)
 
 
 run_tests_if_main()

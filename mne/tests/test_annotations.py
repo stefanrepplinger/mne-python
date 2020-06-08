@@ -4,7 +4,6 @@
 
 from datetime import datetime, timezone
 from itertools import repeat
-from collections import OrderedDict
 import sys
 
 import os.path as op
@@ -968,7 +967,7 @@ def test_annotations_simple_iteration():
                         orig_time=None)
 
     for ii, elements in enumerate(annot[:2]):
-        assert isinstance(elements, OrderedDict)
+        assert isinstance(elements, dict)
         expected_values = (ii, ii, str(ii))
         for elem, expected_type, expected_value in zip(elements.values(),
                                                        EXPECTED_ELEMENTS_TYPE,
@@ -1187,6 +1186,22 @@ def test_annotations_from_events():
                                      orig_time=None)
     assert np.all([a in ['1', '2', '3'] for a in annots.description])
     assert len(annots) == events[events[:, 2] <= 3].shape[0]
+
+
+def test_repr():
+    """Test repr of Annotations."""
+    # short annotation repr (< 79 characters)
+    r = repr(Annotations(range(3), [0] * 3, list("abc")))
+    assert r == '<Annotations | 3 segments: a (1), b (1), c (1)>'
+
+    # long annotation repr (> 79 characters, will be shortened)
+    r = repr(Annotations(range(14), [0] * 14, list("abcdefghijklmn")))
+    assert r == ('<Annotations | 14 segments: a (1), b (1), c (1), d (1), '
+                 'e (1), f (1), g ...>')
+
+    # empty Annotations
+    r = repr(Annotations([], [], []))
+    assert r == '<Annotations | 0 segments>'
 
 
 run_tests_if_main()

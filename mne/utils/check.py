@@ -4,6 +4,7 @@
 #
 # License: BSD (3-clause)
 
+from difflib import get_close_matches
 from distutils.version import LooseVersion
 import operator
 import os
@@ -21,6 +22,10 @@ def _ensure_int(x, name='unknown', must_be='an int'):
     # This is preferred over numbers.Integral, see:
     # https://github.com/scipy/scipy/pull/7351#issuecomment-299713159
     try:
+        # someone passing True/False is much more likely to be an error than
+        # intentional usage
+        if isinstance(x, bool):
+            raise TypeError()
         x = int(operator.index(x))
     except TypeError:
         raise TypeError('%s must be %s, got %s' % (name, must_be, type(x)))
@@ -55,7 +60,7 @@ def check_fname(fname, filetype, endings, endings_err=()):
              % (fname, filetype, print_endings))
 
 
-def check_version(library, min_version):
+def check_version(library, min_version='0.0'):
     r"""Check minimum library version required.
 
     Parameters
@@ -135,10 +140,11 @@ def _check_event_id(event_id, events):
     return event_id
 
 
-def _check_fname(fname, overwrite=False, must_exist=False, name='File'):
+def _check_fname(fname, overwrite=False, must_exist=False, name='File',
+                 allow_dir=False):
     """Check for file existence."""
     _validate_type(fname, 'path-like', 'fname')
-    if op.isfile(fname):
+    if op.isfile(fname) or (allow_dir and op.isdir(fname)):
         if not overwrite:
             raise FileExistsError('Destination file exists. Please use option '
                                   '"overwrite=True" to force overwriting.')
@@ -311,11 +317,18 @@ class _IntLike(object):
 int_like = _IntLike()
 
 
+class _Callable(object):
+    @classmethod
+    def __instancecheck__(cls, other):
+        return callable(other)
+
+
 _multi = {
     'str': (str,),
     'numeric': (np.floating, float, int_like),
     'path-like': (str, Path),
-    'int-like': (int_like,)
+    'int-like': (int_like,),
+    'callable': (_Callable(),),
 }
 try:
     _multi['path-like'] += (os.PathLike,)
@@ -489,14 +502,20 @@ def _check_one_ch_type(method, info, forward, data_cov=None, noise_cov=None):
             raise RuntimeError(
                 'The use of several sensor types with the DICS beamformer is '
                 'not supported yet.')
+    # Later in the code we use the data covariance rank for our computations,
+    # so we can allow_mismatch between the data and noise cov if we construct
+    # a known diagonal covariance (the correct/chosen subspace based on rank
+    # will still be used).
     if noise_cov is None:
         noise_cov = make_ad_hoc_cov(info_pick, std=1.)
+        allow_mismatch = True
     else:
         noise_cov = noise_cov.copy()
         if 'estimator' in noise_cov:
             del noise_cov['estimator']
+        allow_mismatch = False
     _validate_type(noise_cov, Covariance, 'noise_cov')
-    return noise_cov, picks
+    return noise_cov, picks, allow_mismatch
 
 
 def _check_depth(depth, kind='depth_mne'):
@@ -536,6 +555,7 @@ def _check_option(parameter, value, allowed_values, extra=''):
     extra = ' ' + extra if extra else extra
     msg = ("Invalid value for the '{parameter}' parameter{extra}. "
            '{options}, but got {value!r} instead.')
+    allowed_values = list(allowed_values)  # e.g., if a dict was given
     if len(allowed_values) == 1:
         options = 'The only allowed value is %r' % allowed_values[0]
     else:
@@ -605,7 +625,8 @@ def _check_pyqt5_version():
     bad &= sys.platform == 'darwin'
     if bad:
         warn('macOS users should use PyQt5 >= 5.10 for GUIs, got %s. '
-             'Please upgrade e.g. with:\n\n    pip install "PyQt5>=5.10"\n'
+             'Please upgrade e.g. with:\n\n'
+             '    pip install "PyQt5>=5.10,<5.14"\n'
              % (version,))
 
     return version
@@ -662,3 +683,13 @@ def _check_freesurfer_home():
         raise RuntimeError(
             'The FREESURFER_HOME environment variable is not set.')
     return fs_home
+
+
+def _suggest(val, options, cutoff=0.66):
+    options = get_close_matches(val, options, cutoff=cutoff)
+    if len(options) == 0:
+        return ''
+    elif len(options) == 1:
+        return ' Did you mean %r?' % (options[0],)
+    else:
+        return ' Did you mean one of %r?' % (options,)

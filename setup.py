@@ -73,6 +73,7 @@ if __name__ == "__main__":
                        'Programming Language :: Python :: 3',
                        ],
           platforms='any',
+          python_requires='>=3.6',
           install_requires=['numpy>=1.11.3', 'scipy>=0.17.1'],
           packages=package_tree('mne'),
           package_data={'mne': [
@@ -94,6 +95,7 @@ if __name__ == "__main__":
               op.join('gui', 'help', '*.json'),
               op.join('html', '*.js'),
               op.join('html', '*.css'),
+              op.join('icons', '*.svg'),
               op.join('io', 'artemis123', 'resources', '*.csv'),
               op.join('io', 'edf', 'gdf_encodes.txt')
           ]},

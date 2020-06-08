@@ -41,14 +41,10 @@ subject = 'sample'
 # example the inner skull surface, the outer skull surface and the outer skin
 # surface, a.k.a. scalp surface.
 #
-# Computing the BEM surfaces requires FreeSurfer and makes use of either of
-# the two following command line tools:
-#
-#   - :ref:`gen_mne_watershed_bem`
-#   - :ref:`gen_mne_flash_bem`
-#
-# Or by calling in a Python script one of the functions
-# :func:`mne.bem.make_watershed_bem` or :func:`mne.bem.make_flash_bem`.
+# Computing the BEM surfaces requires FreeSurfer and makes use of
+# the command-line tools :ref:`mne watershed_bem` or :ref:`mne flash_bem`, or
+# the related functions :func:`mne.bem.make_watershed_bem` or
+# :func:`mne.bem.make_flash_bem`.
 #
 # Here we'll assume it's already computed. It takes a few minutes per subject.
 #
@@ -57,7 +53,7 @@ subject = 'sample'
 #
 # Let's look at these surfaces. The function :func:`mne.viz.plot_bem`
 # assumes that you have the ``bem`` folder of your subject's FreeSurfer
-# reconstruction, containing the necessary files.
+# reconstruction, containing the necessary surface files.
 
 mne.viz.plot_bem(subject=subject, subjects_dir=subjects_dir,
                  brain_surfaces='white', orientation='coronal')
@@ -71,7 +67,7 @@ mne.viz.plot_bem(subject=subject, subjects_dir=subjects_dir,
 # to align the head and the sensors in stored in a so-called **trans file**.
 # It is a FIF file that ends with ``-trans.fif``. It can be obtained with
 # :func:`mne.gui.coregistration` (or its convenient command line
-# equivalent :ref:`gen_mne_coreg`), or mrilab if you're using a Neuromag
+# equivalent :ref:`mne coreg`), or mrilab if you're using a Neuromag
 # system.
 #
 # Here we assume the coregistration is done, so we just visually check the
@@ -106,19 +102,18 @@ mne.viz.plot_alignment(info, trans, subject=subject, dig=True,
 # :func:`mne.setup_source_space`, while **volumetric** source space is computed
 # using :func:`mne.setup_volume_source_space`.
 #
-# We will now compute a surface-based source space with an OCT-6 resolution.
-# See :ref:`setting_up_source_space` for details on source space definition
-# and spacing parameter.
+# We will now compute a surface-based source space with an ``'oct6'``
+# resolution. See :ref:`setting_up_source_space` for details on source space
+# definition and spacing parameter.
 
-src = mne.setup_source_space(subject, spacing='oct6',
-                             subjects_dir=subjects_dir, add_dist=False)
+src = mne.setup_source_space(subject, spacing='oct6', add_dist='patch',
+                             subjects_dir=subjects_dir)
 print(src)
 
 ###############################################################################
 # The surface based source space ``src`` contains two parts, one for the left
-# hemisphere (4098 locations) and one for the right hemisphere
-# (4098 locations). Sources can be visualized on top of the BEM surfaces
-# in purple.
+# hemisphere (4098 locations) and one for the right hemisphere (4098
+# locations). Sources can be visualized on top of the BEM surfaces in purple.
 
 mne.viz.plot_bem(subject=subject, subjects_dir=subjects_dir,
                  brain_surfaces='white', src=src, orientation='coronal')
@@ -222,16 +217,15 @@ print("Leadfield size : %d sensors x %d dipoles" % leadfield.shape)
 
 ###############################################################################
 # This is equivalent to the following code that explicitly applies the
-# forward operator to a source estimate composed of the identity operator:
-
-import numpy as np  # noqa
-
-n_dipoles = leadfield.shape[1]
-vertices = [src_hemi['vertno'] for src_hemi in fwd_fixed['src']]
-stc = mne.SourceEstimate(1e-9 * np.eye(n_dipoles), vertices, tmin=0., tstep=1)
-leadfield = mne.apply_forward(fwd_fixed, stc, info).data / 1e-9
-
-###############################################################################
+# forward operator to a source estimate composed of the identity operator
+# (which we omit here because it uses a lot of memory)::
+#
+#     >>> import numpy as np
+#     >>> n_dipoles = leadfield.shape[1]
+#     >>> vertices = [src_hemi['vertno'] for src_hemi in fwd_fixed['src']]
+#     >>> stc = mne.SourceEstimate(1e-9 * np.eye(n_dipoles), vertices)
+#     >>> leadfield = mne.apply_forward(fwd_fixed, stc, info).data / 1e-9
+#
 # To save to disk a forward solution you can use
 # :func:`mne.write_forward_solution` and to read it back from disk
 # :func:`mne.read_forward_solution`. Don't forget that FIF files containing
@@ -240,8 +234,7 @@ leadfield = mne.apply_forward(fwd_fixed, stc, info).data / 1e-9
 # To get a fixed-orientation forward solution, use
 # :func:`mne.convert_forward_solution` to convert the free-orientation
 # solution to (surface-oriented) fixed orientation.
-
-###############################################################################
+#
 # Exercise
 # --------
 #

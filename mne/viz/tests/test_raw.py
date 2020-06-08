@@ -102,7 +102,7 @@ def _annotation_helper(raw, events=False):
                 kind='release')
     if mpl_good_enough:
         assert raw.annotations.onset[n_anns] == onset
-        assert_allclose(raw.annotations.duration[n_anns], 1.5)
+        assert_allclose(raw.annotations.duration[n_anns], 1.5)  # 4->1.5
     # modify annotation from beginning
     _fake_click(fig, data_ax, [1., 1.], xform='data', button=1, kind='press')
     _fake_click(fig, data_ax, [0.5, 1.], xform='data', button=1, kind='motion')
@@ -147,7 +147,8 @@ def _annotation_helper(raw, events=False):
 
 
 def _proj_status(ax):
-    return [l.get_visible() for l in ax.findobj(matplotlib.lines.Line2D)][::2]
+    return [line.get_visible()
+            for line in ax.findobj(matplotlib.lines.Line2D)][::2]
 
 
 def test_scale_bar():
@@ -155,14 +156,14 @@ def test_scale_bar():
     sfreq = 1000.
     t = np.arange(10000) / sfreq
     data = np.sin(2 * np.pi * 10. * t)
-    # +/- 1000 fT, 400 fT/cm, 20 uV
+    # +/- 1000 fT, 400 fT/cm, 20 µV
     data = data * np.array([[1000e-15, 400e-13, 20e-6]]).T
     info = create_info(3, sfreq, ('mag', 'grad', 'eeg'))
     raw = RawArray(data, info)
     fig = raw.plot()
     ax = fig.axes[0]
     assert len(ax.texts) == 3  # our labels
-    for text, want in zip(ax.texts, ('800.0 fT/cm', '2000.0 fT', '40.0 uV')):
+    for text, want in zip(ax.texts, ('800.0 fT/cm', '2000.0 fT', '40.0 µV')):
         assert text.get_text().strip() == want
     assert len(ax.lines) == 8  # green, data, nan, bars
     for data, bar in zip(ax.lines[1:4], ax.lines[5:8]):
@@ -218,8 +219,10 @@ def test_plot_raw():
     _fake_click(ssp_fig, ssp_fig.get_axes()[1], [0.5, 0.5])  # all off
     _fake_click(ssp_fig, ssp_fig.get_axes()[1], [0.5, 0.5], kind='release')
     assert _proj_status(ax) == [False] * 3
+    assert fig._mne_params['projector'] is None  # actually off
     _fake_click(ssp_fig, ssp_fig.get_axes()[1], [0.5, 0.5])  # all on
     _fake_click(ssp_fig, ssp_fig.get_axes()[1], [0.5, 0.5], kind='release')
+    assert fig._mne_params['projector'] is not None  # on
     assert _proj_status(ax) == [True] * 3
 
     # test keypresses
@@ -290,6 +293,12 @@ def test_plot_raw():
             break
     for key in ['down', 'up', 'escape']:
         fig.canvas.key_press_event(key)
+
+    raw._data[:] = np.nan
+    # this should (at least) not die, the output should pretty clearly show
+    # that there is a problem so probably okay to just plot something blank
+    with pytest.warns(None):
+        raw.plot(scalings='auto')
 
     plt.close('all')
 
@@ -369,7 +378,8 @@ def test_plot_raw_psd():
     raw.plot_psd(tmax=None, picks=picks, ax=ax, average=True)
     plt.close('all')
     ax = plt.axes()
-    pytest.raises(ValueError, raw.plot_psd, ax=ax, average=True)
+    with pytest.raises(ValueError, match='2 axes must be supplied, got 1'):
+        raw.plot_psd(ax=ax, average=True)
     plt.close('all')
     ax = plt.subplots(2)[1]
     raw.plot_psd(tmax=None, ax=ax, average=True)
@@ -410,6 +420,7 @@ def test_plot_raw_psd():
     raw.set_annotations(Annotations([1, 5], [3, 3], ['test', 'test']))
     raw.plot_psd(reject_by_annotation=True)
     raw.plot_psd(reject_by_annotation=False)
+    plt.close('all')
 
     # test fmax value checking
     with pytest.raises(ValueError, match='not exceed one half the sampling'):
@@ -421,7 +432,7 @@ def test_plot_raw_psd():
 
     # gh-5046
     raw = read_raw_fif(raw_fname, preload=True).crop(0, 1)
-    picks = pick_types(raw.info)
+    picks = pick_types(raw.info, meg=True)
     raw.plot_psd(picks=picks, average=False)
     raw.plot_psd(picks=picks, average=True)
     plt.close('all')
@@ -430,6 +441,15 @@ def test_plot_raw_psd():
                           verbose='error')
     fig = raw.plot_psd()
     assert len(fig.axes) == 10
+    plt.close('all')
+
+    # gh-7631
+    data = 1e-3 * np.random.rand(2, 100)
+    info = create_info(['CH1', 'CH2'], 100)
+    raw = RawArray(data, info)
+    picks = pick_types(raw.info, misc=True)
+    raw.plot_psd(picks=picks, spatial_colors=False)
+    plt.close('all')
 
 
 def test_plot_sensors():

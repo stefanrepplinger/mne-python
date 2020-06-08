@@ -302,8 +302,8 @@ def _source_induced_power(epochs, inverse_operator, freqs, label=None,
     else:
         plv = None
 
-    if method != "MNE":
-        power *= noise_norm.ravel()[:, None, None] ** 2
+    if noise_norm is not None:
+        power *= noise_norm[:, :, np.newaxis] ** 2
 
     return power, plv, vertno
 
@@ -499,7 +499,7 @@ def compute_source_psd(raw, inverse_operator, lambda2=1. / 9., method="dSPM",
     stc_psd : instance of SourceEstimate | VolSourceEstimate
         The PSD of each of the sources.
     sensor_psd : instance of EvokedArray
-        The PSD of each sensor. Only returned if `return_sensor` is True.
+        The PSD of each sensor. Only returned if ``return_sensor`` is True.
 
     See Also
     --------
@@ -609,8 +609,7 @@ def _compute_source_psd_epochs(epochs, inverse_operator, lambda2=1. / 9.,
         weights = np.sqrt(eigvals)[np.newaxis, :, np.newaxis]
 
     subject = _subject_from_inverse(inverse_operator)
-    iter_epochs = ProgressBar(n_epochs)
-    iter_epochs.iterable = epochs
+    iter_epochs = ProgressBar(epochs, max_value=n_epochs)
     evoked_info = pick_info(epochs.info, sel, verbose=False)
     for k, e in enumerate(iter_epochs):
         data = np.dot(Vh, e[sel])  # reducing data rank
@@ -673,7 +672,7 @@ def _compute_source_psd_epochs(epochs, inverse_operator, lambda2=1. / 9.,
         if is_free_ori and pick_ori is None:
             psd = combine_xyz(psd, square=False)
 
-        if method != "MNE":
+        if noise_norm is not None:
             psd *= noise_norm ** 2
 
         out = _make_stc(psd, tmin=freqs[0], tstep=fstep, vertices=vertno,
@@ -688,7 +687,6 @@ def _compute_source_psd_epochs(epochs, inverse_operator, lambda2=1. / 9.,
         yield out
 
     iter_epochs.update(n_epochs)  # in case some were skipped
-    iter_epochs.__exit__(None, None, None)
 
 
 @verbose

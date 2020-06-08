@@ -51,9 +51,9 @@ def get_head_surf(subject, source=('bem', 'head'), subjects_dir=None,
     subject : str
         Subject name.
     source : str | list of str
-        Type to load. Common choices would be `'bem'` or `'head'`. We first
-        try loading `'$SUBJECTS_DIR/$SUBJECT/bem/$SUBJECT-$SOURCE.fif'`, and
-        then look for `'$SUBJECT*$SOURCE.fif'` in the same directory by going
+        Type to load. Common choices would be ``'bem'`` or ``'head'``. We first
+        try loading ``'$SUBJECTS_DIR/$SUBJECT/bem/$SUBJECT-$SOURCE.fif'``, and
+        then look for ``'$SUBJECT*$SOURCE.fif'`` in the same directory by going
         through all files matching the pattern. The head surface will be read
         from the first file containing a head surface. Can also be a list
         to try multiple strings.
@@ -980,8 +980,8 @@ def write_surface(fname, coords, faces, create_stamp='', volume_info=None,
         vnum = len(coords)
         fnum = len(faces)
         fid.write(pack('>2i', vnum, fnum))
-        fid.write(np.array(coords, dtype='>f4').tostring())
-        fid.write(np.array(faces, dtype='>i4').tostring())
+        fid.write(np.array(coords, dtype='>f4').tobytes())
+        fid.write(np.array(faces, dtype='>i4').tobytes())
 
         # Add volume info, if given
         if volume_info is not None and len(volume_info) > 0:
@@ -1426,6 +1426,8 @@ def _find_nearest_tri_pts(rrs, pt_triss, pt_lens,
         pqs = np.empty((len(drs), 2))
         dists = np.empty(len(drs))
         dist = np.inf
+        # make life easier for numba var typing
+        p, q, pt = np.float64(0.), np.float64(1.), np.int64(0)
         found = False
         for ii in range(len(drs)):
             pqs[ii] = np.dot(mats[ii], np.dot(r1213s[ii], drs[ii]))
@@ -1596,10 +1598,10 @@ def read_tri(fname_in, swap=False, verbose=None):
         inds = range(1, 4)
     else:
         raise IOError('Unrecognized format of data.')
-    rr = np.array([np.array([float(v) for v in l.split()])[inds]
-                   for l in lines[1:n_nodes + 1]])
-    tris = np.array([np.array([int(v) for v in l.split()])[inds]
-                     for l in lines[n_nodes + 2:n_nodes + 2 + n_tris]])
+    rr = np.array([np.array([float(v) for v in line.split()])[inds]
+                   for line in lines[1:n_nodes + 1]])
+    tris = np.array([np.array([int(v) for v in line.split()])[inds]
+                     for line in lines[n_nodes + 2:n_nodes + 2 + n_tris]])
     if swap:
         tris[:, [2, 1]] = tris[:, [1, 2]]
     tris -= 1

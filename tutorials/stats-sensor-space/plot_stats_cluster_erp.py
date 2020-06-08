@@ -98,8 +98,8 @@ print(str(significant_points.sum()) + " points selected by TFCE ...")
 # effects on the head.
 
 # We need an evoked object to plot the image to be masked
-evoked = mne.combine_evoked([long_words.average(), -short_words.average()],
-                            weights='equal')  # calculate difference wave
+evoked = mne.combine_evoked([long_words.average(), short_words.average()],
+                            weights=[1, -1])  # calculate difference wave
 time_unit = dict(time_unit="s")
 evoked.plot_joint(title="Long vs. short words", ts_args=time_unit,
                   topomap_args=time_unit)  # show difference wave
@@ -114,7 +114,7 @@ evoked.plot_image(axes=axes, group_by=selections, colorbar=False, show=False,
                   mask=significant_points, show_names="all", titles=None,
                   **time_unit)
 plt.colorbar(axes["Left"].images[-1], ax=list(axes.values()), shrink=.3,
-             label="uV")
+             label="µV")
 
 plt.show()
 

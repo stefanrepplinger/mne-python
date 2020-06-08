@@ -208,7 +208,7 @@ class Covariance(dict):
             s = 'diagonal : %s' % self.data.size
         s += ", n_samples : %s" % self.nfree
         s += ", data : %s" % self.data
-        return "<Covariance  |  %s>" % s
+        return "<Covariance | %s>" % s
 
     def __add__(self, cov):
         """Add Covariance taking into account number of degrees of freedom."""
@@ -312,8 +312,8 @@ def make_ad_hoc_cov(info, std=None, verbose=None):
         Measurement info.
     std : dict of float | None
         Standard_deviation of the diagonal elements. If dict, keys should be
-        `grad` for gradiometers, `mag` for magnetometers and `eeg` for EEG
-        channels. If None, default values will be used (see Notes).
+        ``'grad'`` for gradiometers, ``'mag'`` for magnetometers and ``'eeg'``
+        for EEG channels. If None, default values will be used (see Notes).
     %(verbose)s
 
     Returns
@@ -323,7 +323,7 @@ def make_ad_hoc_cov(info, std=None, verbose=None):
 
     Notes
     -----
-    The default noise values are 5 fT/cm, 20 fT, and 0.2 uV for gradiometers,
+    The default noise values are 5 fT/cm, 20 fT, and 0.2 µV for gradiometers,
     magnetometers, and EEG channels respectively.
 
     .. versionadded:: 0.9.0
@@ -360,6 +360,9 @@ def compute_raw_covariance(raw, tmin=0, tmax=None, tstep=0.2, reject=None,
 
     It is typically useful to estimate a noise covariance from empty room
     data or time intervals before starting the stimulation.
+
+    .. note:: To estimate the noise covariance from epoched data, use
+              :func:`mne.compute_covariance` instead.
 
     Parameters
     ----------
@@ -446,7 +449,7 @@ def compute_raw_covariance(raw, tmin=0, tmax=None, tstep=0.2, reject=None,
 
     See Also
     --------
-    compute_covariance : Estimate noise covariance matrix from epochs.
+    compute_covariance : Estimate noise covariance matrix from epoched data.
 
     Notes
     -----
@@ -607,6 +610,10 @@ def compute_covariance(epochs, keep_sample_mean=True, tmin=None, tmax=None,
         2. an Epochs object is created for multiple events and passed
            to this function.
 
+    .. note:: To estimate the noise covariance from non-epoched raw data, such
+              as an empty-room recording, use
+              :func:`mne.compute_raw_covariance` instead.
+
     Parameters
     ----------
     epochs : instance of Epochs, or list of Epochs
@@ -693,7 +700,8 @@ def compute_covariance(epochs, keep_sample_mean=True, tmin=None, tmax=None,
 
     See Also
     --------
-    compute_raw_covariance : Estimate noise covariance from raw data.
+    compute_raw_covariance : Estimate noise covariance from raw data, such as
+        empty-room recordings.
 
     Notes
     -----
@@ -964,7 +972,7 @@ def _compute_covariance_auto(data, method, info, method_params, cv,
         estimator_cov_info = list()
         msg = 'Estimating covariance using %s'
 
-        ok_sklearn = check_version('sklearn', '0.15')
+        ok_sklearn = check_version('sklearn')
         if not ok_sklearn and (len(method) != 1 or method[0] != 'empirical'):
             raise ValueError('scikit-learn is not installed, `method` must be '
                              '`empirical`, got %s' % (method,))
@@ -1490,7 +1498,7 @@ def regularize(cov, info, mag=0.1, grad=0.1, eeg=0.1, exclude='bads',
         Regularization factor for MEG magnetometers.
     grad : float (default 0.1)
         Regularization factor for MEG gradiometers. Must be the same as
-        `mag` if data have been processed with SSS.
+        ``mag`` if data have been processed with SSS.
     eeg : float (default 0.1)
         Regularization factor for EEG.
     exclude : list | 'bads' (default 'bads')
@@ -1645,22 +1653,17 @@ def _regularized_covariance(data, reg=None, method_params=None, info=None,
     cov : ndarray, shape (n_channels, n_channels)
         The covariance matrix.
     """
+    _validate_type(reg, (str, 'numeric', None))
     if reg is None:
         reg = 'empirical'
-    try:
+    elif not isinstance(reg, str):
         reg = float(reg)
-    except ValueError:
-        pass
-    if isinstance(reg, float):
         if method_params is not None:
             raise ValueError('If reg is a float, method_params must be None '
                              '(got %s)' % (type(method_params),))
         method_params = dict(shrinkage=dict(
             shrinkage=reg, assume_centered=True, store_precision=False))
         reg = 'shrinkage'
-    elif not isinstance(reg, str):
-        raise ValueError('reg must be a float, str, or None, got %s (%s)'
-                         % (reg, type(reg)))
     method, method_params = _check_method_params(
         reg, method_params, name='reg', allow_auto=False, rank=rank)
     # use mag instead of eeg here to avoid the cov EEG projection warning
@@ -1686,7 +1689,7 @@ def compute_whitener(noise_cov, info=None, picks=None, rank=None,
     noise_cov : Covariance
         The noise covariance.
     info : dict | None
-        The measurement info. Can be None if `noise_cov` has already been
+        The measurement info. Can be None if ``noise_cov`` has already been
         prepared with :func:`prepare_noise_cov`.
     %(picks_good_data_noref)s
     %(rank_None)s

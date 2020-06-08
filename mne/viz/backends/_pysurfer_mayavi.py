@@ -76,6 +76,7 @@ class _Renderer(_BaseRenderer):
             self.fig = _mlab_figure(figure=fig, bgcolor=bgcolor, size=size)
         else:
             self.fig = fig
+        self.fig._window_size = size
         _toggle_mlab_render(self.fig, show)
 
     def subplot(self, x, y):
@@ -92,7 +93,7 @@ class _Renderer(_BaseRenderer):
 
     def mesh(self, x, y, z, triangles, color, opacity=1.0, shading=False,
              backface_culling=False, scalars=None, colormap=None,
-             vmin=None, vmax=None, **kwargs):
+             vmin=None, vmax=None, interpolate_before_map=True, **kwargs):
         if color is not None:
             color = _check_color(color)
         if color is not None and isinstance(color, np.ndarray) \
@@ -115,6 +116,7 @@ class _Renderer(_BaseRenderer):
                                                 vmin=vmin,
                                                 vmax=vmax,
                                                 **kwargs)
+
             if vertex_color is not None:
                 surface.module_manager.scalar_lut_manager.lut.table = \
                     vertex_color
@@ -179,32 +181,45 @@ class _Renderer(_BaseRenderer):
         origin = np.atleast_2d(origin)
         destination = np.atleast_2d(destination)
         if scalars is None:
-            surface = self.mlab.plot3d([origin[:, 0], destination[:, 0]],
-                                       [origin[:, 1], destination[:, 1]],
-                                       [origin[:, 2], destination[:, 2]],
-                                       tube_radius=radius,
-                                       color=color,
-                                       figure=self.fig)
+            # TODO: iterating over each tube rather than plotting in
+            #       one call may be slow.
+            #       See https://github.com/mne-tools/mne-python/issues/7644
+            for idx in range(origin.shape[0]):
+                surface = self.mlab.plot3d([origin[idx, 0],
+                                            destination[idx, 0]],
+                                           [origin[idx, 1],
+                                            destination[idx, 1]],
+                                           [origin[idx, 2],
+                                            destination[idx, 2]],
+                                           tube_radius=radius,
+                                           color=color,
+                                           figure=self.fig)
         else:
-            surface = self.mlab.plot3d([origin[:, 0], destination[:, 0]],
-                                       [origin[:, 1], destination[:, 1]],
-                                       [origin[:, 2], destination[:, 2]],
-                                       [scalars[:, 0], scalars[:, 1]],
-                                       tube_radius=radius,
-                                       vmin=vmin,
-                                       vmax=vmax,
-                                       colormap=colormap,
-                                       figure=self.fig)
+            for idx in range(origin.shape[0]):
+                surface = self.mlab.plot3d([origin[idx, 0],
+                                            destination[idx, 0]],
+                                           [origin[idx, 1],
+                                            destination[idx, 1]],
+                                           [origin[idx, 2],
+                                            destination[idx, 2]],
+                                           [scalars[idx, 0],
+                                            scalars[idx, 1]],
+                                           tube_radius=radius,
+                                           vmin=vmin,
+                                           vmax=vmax,
+                                           colormap=colormap,
+                                           figure=self.fig)
         surface.module_manager.scalar_lut_manager.reverse_lut = reverse_lut
         return surface
 
     def quiver3d(self, x, y, z, u, v, w, color, scale, mode, resolution=8,
                  glyph_height=None, glyph_center=None, glyph_resolution=None,
                  opacity=1.0, scale_mode='none', scalars=None,
-                 backface_culling=False):
+                 backface_culling=False, colormap=None, vmin=None, vmax=None,
+                 line_width=2., name=None):
         color = _check_color(color)
         with warnings.catch_warnings(record=True):  # traits
-            if mode == 'arrow':
+            if mode in ('arrow', '2darrow', '3darrow'):
                 self.mlab.quiver3d(x, y, z, u, v, w, mode=mode,
                                    color=color, scale_factor=scale,
                                    scale_mode=scale_mode,
@@ -243,9 +258,12 @@ class _Renderer(_BaseRenderer):
             self.mlab.text3d(x, y, z, text, scale=scale, color=color,
                              figure=self.fig)
 
-    def scalarbar(self, source, title=None, n_labels=4, bgcolor=None):
+    def scalarbar(self, source, color="white", title=None, n_labels=4,
+                  bgcolor=None):
         with warnings.catch_warnings(record=True):  # traits
-            self.mlab.scalarbar(source, title=title, nb_labels=n_labels)
+            bar = self.mlab.scalarbar(source, title=title, nb_labels=n_labels)
+        if color is not None:
+            bar.label_text_property.color = _check_color(color)
         if bgcolor is not None:
             from tvtk.api import tvtk
             bgcolor = np.asarray(bgcolor)
@@ -275,6 +293,11 @@ class _Renderer(_BaseRenderer):
                      elevation=elevation, distance=distance,
                      focalpoint=focalpoint)
 
+    def reset_camera(self):
+        renderer = getattr(self.fig.scene, 'renderer', None)
+        if renderer is not None:
+            renderer.reset_camera()
+
     def screenshot(self, mode='rgb', filename=None):
         return _take_3d_screenshot(figure=self.fig, mode=mode,
                                    filename=filename)
@@ -285,6 +308,10 @@ class _Renderer(_BaseRenderer):
         pts = self.fig.children[-1]
 
         return _Projection(xy=xy, pts=pts)
+
+    def enable_depth_peeling(self):
+        if self.fig.scene is not None:
+            self.fig.scene.renderer.use_depth_peeling = True
 
 
 def _mlab_figure(**kwargs):
@@ -441,7 +468,7 @@ def _take_3d_screenshot(figure, mode='rgb', filename=None):
     if MNE_3D_BACKEND_TESTING:
         ndim = 3 if mode == 'rgb' else 4
         if figure.scene is None:
-            figure_size = (600, 600)
+            figure_size = figure._window_size
         else:
             figure_size = figure.scene._renwin.size
         return np.zeros(tuple(figure_size) + (ndim,), np.uint8)

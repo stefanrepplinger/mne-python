@@ -50,8 +50,8 @@ def _check_orig_units(orig_units):
 
         # Common "invalid units" can be remapped to their valid equivalent
         remap_dict = dict()
-        remap_dict['uv'] = u'µV'
-        remap_dict[u'μv'] = u'µV'  # greek letter mu vs micro sign. use micro
+        remap_dict['uv'] = 'µV'
+        remap_dict['μv'] = 'µV'  # greek letter mu vs micro sign. use micro
         if unit.lower() in remap_dict:
             orig_units_remapped[ch_name] = remap_dict[unit.lower()]
             continue
@@ -196,10 +196,10 @@ def _file_size(fname):
 
 
 def _read_segments_file(raw, data, idx, fi, start, stop, cals, mult,
-                        dtype='<i2', n_channels=None, offset=0,
-                        trigger_ch=None):
+                        dtype, n_channels=None, offset=0, trigger_ch=None):
     """Read a chunk of raw data."""
-    n_channels = raw.info['nchan'] if n_channels is None else n_channels
+    if n_channels is None:
+        n_channels = raw._raw_extras[fi]['orig_nchan']
 
     n_bytes = np.dtype(dtype).itemsize
     # data_offset and data_left count data samples (channels x time points),
@@ -305,6 +305,6 @@ def _construct_bids_filename(base, ext, part_idx):
             idx = deconstructed_base.index(mod)
             modality = deconstructed_base.pop(idx)
     base = '_'.join(deconstructed_base)
-    use_fname = '%s_part-%02d_%s%s' % (base, part_idx, modality, ext)
+    use_fname = '{}_split-{:02}_{}{}'.format(base, part_idx, modality, ext)
 
     return use_fname

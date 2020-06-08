@@ -12,6 +12,7 @@ Actual implementation of _Renderer and _Projection classes.
 # License: Simplified BSD
 
 from contextlib import contextmanager
+import os
 import warnings
 
 import numpy as np
@@ -24,9 +25,13 @@ from ...utils import copy_base_doc_to_subclass_doc
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import pyvista
-    from pyvista import (Plotter, BackgroundPlotter, PolyData,
-                         Line, close_all, UnstructuredGrid)
+    from pyvista import Plotter, PolyData, Line, close_all, UnstructuredGrid
+    try:
+        from pyvistaqt import BackgroundPlotter  # noqa
+    except ImportError:
+        from pyvista import BackgroundPlotter
     from pyvista.utilities import try_callback
+    from pyvista.plotting.plotting import _ALL_PLOTTERS
 
 
 _FIGURES = dict()
@@ -36,6 +41,7 @@ class _Figure(object):
     def __init__(self, plotter=None,
                  plotter_class=None,
                  display=None,
+                 show=False,
                  title='PyVista Scene',
                  size=(600, 600),
                  shape=(1, 1),
@@ -51,6 +57,7 @@ class _Figure(object):
         self.notebook = notebook
 
         self.store = dict()
+        self.store['show'] = show
         self.store['title'] = title
         self.store['window_size'] = size
         self.store['shape'] = shape
@@ -65,6 +72,7 @@ class _Figure(object):
             self.plotter_class = Plotter
 
         if self.plotter_class == Plotter:
+            self.store.pop('show', None)
             self.store.pop('title', None)
             self.store.pop('auto_update', None)
 
@@ -101,6 +109,21 @@ class _Projection(object):
         self.pts.SetVisibility(state)
 
 
+def _enable_aa(figure, plotter):
+    """Enable it everywhere except Azure."""
+    # XXX for some reason doing this on Azure causes access violations:
+    #     ##[error]Cmd.exe exited with code '-1073741819'
+    # So for now don't use it there. Maybe has to do with setting these
+    # before the window has actually been made "active"...?
+    # For Mayavi we have an "on activated" event or so, we should look into
+    # using this for Azure at some point, too.
+    if os.getenv('AZURE_CI_WINDOWS', 'false').lower() == 'true':
+        return
+    if figure.is_active():
+        plotter.enable_anti_aliasing()
+        plotter.ren_win.LineSmoothingOn()
+
+
 @copy_base_doc_to_subclass_doc
 class _Renderer(_BaseRenderer):
     """Class managing rendering scene.
@@ -116,9 +139,10 @@ class _Renderer(_BaseRenderer):
     def __init__(self, fig=None, size=(600, 600), bgcolor='black',
                  name="PyVista Scene", show=False, shape=(1, 1)):
         from .renderer import MNE_3D_BACKEND_TESTING
-        figure = _Figure(title=name, size=size, shape=shape,
+        figure = _Figure(show=show, title=name, size=size, shape=shape,
                          background_color=bgcolor, notebook=None)
         self.font_family = "arial"
+        self.tube_n_sides = 20
         if isinstance(fig, int):
             saved_fig = _FIGURES.get(fig)
             # Restore only active plotter
@@ -140,14 +164,25 @@ class _Renderer(_BaseRenderer):
             warnings.filterwarnings("ignore", category=FutureWarning)
             if MNE_3D_BACKEND_TESTING:
                 self.figure.plotter_class = Plotter
+                self.figure.smooth_shading = False
+                self.tube_n_sides = 3
             with _disabled_depth_peeling():
                 self.plotter = self.figure.build()
             self.plotter.hide_axes()
+            if hasattr(self.plotter, "default_camera_tool_bar"):
+                self.plotter.default_camera_tool_bar.close()
+            if hasattr(self.plotter, "saved_cameras_tool_bar"):
+                self.plotter.saved_cameras_tool_bar.close()
+            if not MNE_3D_BACKEND_TESTING:
+                _enable_aa(self.figure, self.plotter)
 
     def subplot(self, x, y):
+        from .renderer import MNE_3D_BACKEND_TESTING
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FutureWarning)
             self.plotter.subplot(x, y)
+            if not MNE_3D_BACKEND_TESTING:
+                _enable_aa(self.figure, self.plotter)
 
     def scene(self):
         return self.figure
@@ -157,7 +192,7 @@ class _Renderer(_BaseRenderer):
 
     def mesh(self, x, y, z, triangles, color, opacity=1.0, shading=False,
              backface_culling=False, scalars=None, colormap=None,
-             vmin=None, vmax=None, **kwargs):
+             vmin=None, vmax=None, interpolate_before_map=True, **kwargs):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FutureWarning)
             smooth_shading = self.figure.smooth_shading
@@ -189,7 +224,8 @@ class _Renderer(_BaseRenderer):
                 rgba=rgba, opacity=opacity, cmap=colormap,
                 backface_culling=backface_culling,
                 rng=[vmin, vmax], show_scalar_bar=False,
-                smooth_shading=smooth_shading
+                smooth_shading=smooth_shading,
+                interpolate_before_map=interpolate_before_map,
             )
             return actor, mesh
 
@@ -210,7 +246,7 @@ class _Renderer(_BaseRenderer):
             contour = mesh.contour(isosurfaces=contours, rng=(vmin, vmax))
             line_width = width
             if kind == 'tube':
-                contour = contour.tube(radius=width)
+                contour = contour.tube(radius=width, n_sides=self.tube_n_sides)
                 line_width = 1.0
             self.plotter.add_mesh(mesh=contour,
                                   show_scalar_bar=False,
@@ -255,7 +291,7 @@ class _Renderer(_BaseRenderer):
                 sphere.SetRadius(radius)
             sphere.Update()
             geom = sphere.GetOutput()
-            mesh = PolyData(center)
+            mesh = PolyData(np.array(center))
             glyph = mesh.glyph(orient=False, scale=False,
                                factor=factor, geom=geom)
             actor = self.plotter.add_mesh(
@@ -279,7 +315,7 @@ class _Renderer(_BaseRenderer):
                     color = None
                 else:
                     scalars = None
-                tube = line.tube(radius)
+                tube = line.tube(radius, n_sides=self.tube_n_sides)
                 self.plotter.add_mesh(mesh=tube,
                                       scalars=scalars,
                                       flip_scalars=reverse_lut,
@@ -294,7 +330,7 @@ class _Renderer(_BaseRenderer):
     def quiver3d(self, x, y, z, u, v, w, color, scale, mode, resolution=8,
                  glyph_height=None, glyph_center=None, glyph_resolution=None,
                  opacity=1.0, scale_mode='none', scalars=None,
-                 backface_culling=False):
+                 backface_culling=False, line_width=2., name=None):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FutureWarning)
             factor = scale
@@ -306,21 +342,21 @@ class _Renderer(_BaseRenderer):
             cells = np.c_[np.full(n_points, 1), range(n_points)]
             grid = UnstructuredGrid(offset, cells, cell_type, points)
             grid.point_arrays['vec'] = vectors
-            if scale_mode == "scalar":
+            if scale_mode == 'scalar':
                 grid.point_arrays['mag'] = np.array(scalars)
                 scale = 'mag'
             else:
                 scale = False
-            if mode == "arrow":
+            if mode == '2darrow':
+                return _arrow_glyph(grid, factor)
+            elif mode == 'arrow' or mode == '3darrow':
                 self.plotter.add_mesh(grid.glyph(orient='vec',
                                                  scale=scale,
                                                  factor=factor),
                                       color=color,
                                       opacity=opacity,
-                                      backface_culling=backface_culling,
-                                      smooth_shading=self.figure.
-                                      smooth_shading)
-            elif mode == "cone":
+                                      backface_culling=backface_culling)
+            elif mode == 'cone':
                 cone = vtk.vtkConeSource()
                 if glyph_height is not None:
                     cone.SetHeight(glyph_height)
@@ -337,11 +373,9 @@ class _Renderer(_BaseRenderer):
                                                  geom=geom),
                                       color=color,
                                       opacity=opacity,
-                                      backface_culling=backface_culling,
-                                      smooth_shading=self.figure.
-                                      smooth_shading)
+                                      backface_culling=backface_culling)
 
-            elif mode == "cylinder":
+            elif mode == 'cylinder':
                 cylinder = vtk.vtkCylinderSource()
                 cylinder.SetHeight(glyph_height)
                 cylinder.SetRadius(0.15)
@@ -364,9 +398,7 @@ class _Renderer(_BaseRenderer):
                                                  geom=geom),
                                       color=color,
                                       opacity=opacity,
-                                      backface_culling=backface_culling,
-                                      smooth_shading=self.figure.
-                                      smooth_shading)
+                                      backface_culling=backface_culling)
 
     def text2d(self, x_window, y_window, text, size=14, color='white',
                justification=None):
@@ -403,19 +435,24 @@ class _Renderer(_BaseRenderer):
                                           name=text,
                                           shape_opacity=0)
 
-    def scalarbar(self, source, title=None, n_labels=4, bgcolor=None):
+    def scalarbar(self, source, color="white", title=None, n_labels=4,
+                  bgcolor=None):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FutureWarning)
-            self.plotter.add_scalar_bar(title=title, n_labels=n_labels,
+            self.plotter.add_scalar_bar(color=color, title=title,
+                                        n_labels=n_labels,
                                         use_opacity=False, n_colors=256,
                                         position_x=0.15,
                                         position_y=0.05, width=0.7,
+                                        shadow=False, bold=True,
                                         label_font_size=22,
                                         font_family=self.font_family,
                                         background_color=bgcolor)
 
     def show(self):
         self.figure.display = self.plotter.show()
+        if hasattr(self.plotter, "app_window"):
+            self.plotter.app_window.show()
         return self.scene()
 
     def close(self):
@@ -425,6 +462,9 @@ class _Renderer(_BaseRenderer):
                    focalpoint=None):
         _set_3d_view(self.figure, azimuth=azimuth, elevation=elevation,
                      distance=distance, focalpoint=focalpoint)
+
+    def reset_camera(self):
+        self.plotter.reset_camera()
 
     def screenshot(self, mode='rgb', filename=None):
         return _take_3d_screenshot(figure=self.figure, mode=mode,
@@ -437,6 +477,11 @@ class _Renderer(_BaseRenderer):
         pts = self.plotter.renderer.GetActors().GetLastItem()
 
         return _Projection(xy=xy, pts=pts)
+
+    def enable_depth_peeling(self):
+        if not self.figure.store['off_screen']:
+            for renderer in self.plotter.renderers:
+                renderer.enable_depth_peeling()
 
 
 def _deg2rad(deg):
@@ -547,7 +592,7 @@ def _set_3d_view(figure, azimuth, elevation, focalpoint, distance):
         position, cen, view_up]
 
 
-def _set_3d_title(figure, title, size=40):
+def _set_3d_title(figure, title, size=16):
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
         figure.plotter.add_text(title, font_size=size, color='white')
@@ -561,7 +606,11 @@ def _check_3d_figure(figure):
 def _close_3d_figure(figure):
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
+        # close the window
         figure.plotter.close()
+        # free memory and deregister from the scraper
+        figure.plotter.deep_clean()
+        del _ALL_PLOTTERS[figure.plotter._id_name]
 
 
 def _take_3d_screenshot(figure, mode='rgb', filename=None):
@@ -639,6 +688,85 @@ def _update_picking_callback(plotter,
         on_pick
     )
     plotter.picker = picker
+
+
+def _add_polydata_actor(plotter, polydata, name=None,
+                        hide=False):
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(polydata)
+
+    actor = vtk.vtkActor()
+    actor.SetMapper(mapper)
+    if hide:
+        actor.VisibilityOff()
+
+    plotter.add_actor(actor, name=name)
+    return actor
+
+
+def _arrow_glyph(grid, factor):
+    glyph = vtk.vtkGlyphSource2D()
+    glyph.SetGlyphTypeToArrow()
+    glyph.FilledOff()
+    glyph.Update()
+    geom = glyph.GetOutput()
+
+    # fix position
+    tr = vtk.vtkTransform()
+    tr.Translate(0.5, 0., 0.)
+    trp = vtk.vtkTransformPolyDataFilter()
+    trp.SetInputData(geom)
+    trp.SetTransform(tr)
+    trp.Update()
+    geom = trp.GetOutput()
+
+    polydata = _glyph(
+        grid,
+        scale_mode='vector',
+        scalars=False,
+        orient='vec',
+        factor=factor,
+        geom=geom,
+    )
+    return pyvista.wrap(polydata)
+
+
+def _glyph(dataset, scale_mode='scalar', orient=True, scalars=True, factor=1.0,
+           geom=None, tolerance=0.0, absolute=False, clamping=False, rng=None):
+    if geom is None:
+        arrow = vtk.vtkArrowSource()
+        arrow.Update()
+        geom = arrow.GetOutput()
+    alg = vtk.vtkGlyph3D()
+    alg.SetSourceData(geom)
+    if isinstance(scalars, str):
+        dataset.active_scalars_name = scalars
+    if isinstance(orient, str):
+        dataset.active_vectors_name = orient
+        orient = True
+    if scale_mode == 'scalar':
+        alg.SetScaleModeToScaleByScalar()
+    elif scale_mode == 'vector':
+        alg.SetScaleModeToScaleByVector()
+    else:
+        alg.SetScaleModeToDataScalingOff()
+    if rng is not None:
+        alg.SetRange(rng)
+    alg.SetOrient(orient)
+    alg.SetInputData(dataset)
+    alg.SetScaleFactor(factor)
+    alg.SetClamping(clamping)
+    alg.Update()
+    return alg.GetOutput()
+
+
+def _require_minimum_version(version_required):
+    from distutils.version import LooseVersion
+    version = LooseVersion(pyvista.__version__)
+    if version < version_required:
+        raise ImportError('pyvista>={} is required for this module but the '
+                          'version found is {}'.format(version_required,
+                                                       version))
 
 
 @contextmanager
